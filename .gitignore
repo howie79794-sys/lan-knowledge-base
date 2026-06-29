@@ -1,0 +1,41 @@
+# macOS
+.DS_Store
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Runtime data
+data/
+kb-data/
+uploads/
+processed/
+tmp/
+backups/
+*.sqlite
+*.sqlite3
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+build/
+.vite/
+
+# Logs
+*.log
+logs/
+
+# IDE
+.idea/
+.vscode/
