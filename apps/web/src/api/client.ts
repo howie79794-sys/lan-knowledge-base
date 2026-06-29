@@ -4,6 +4,7 @@ export type DocumentSummary = {
   original_filename: string;
   file_format: string;
   file_ext: string;
+  folder_path: string;
   size_bytes: number;
   status: "uploaded" | "processing" | "ready" | "failed" | "deleted";
   purpose: string;
@@ -26,6 +27,18 @@ export type DocumentDetail = DocumentSummary & {
 export type Categories = {
   purposes: string[];
   formats: string[];
+};
+
+export type FolderEntry = {
+  name: string;
+  path: string;
+};
+
+export type FolderResponse = {
+  path: string;
+  parent: string | null;
+  folders: FolderEntry[];
+  documents: DocumentSummary[];
 };
 
 export type AuditLog = {
@@ -72,6 +85,10 @@ export async function fetchDocuments(filters: { purpose?: string; format?: strin
   return request<{ total: number; documents: DocumentSummary[] }>(`/api/v1/documents${suffix}`);
 }
 
+export async function fetchFolder(path: string) {
+  return request<FolderResponse>(`/api/v1/folders?path=${encodeURIComponent(path)}`);
+}
+
 export async function fetchDocument(id: string) {
   return request<DocumentDetail>(`/api/v1/documents/${id}`);
 }
@@ -91,6 +108,10 @@ export async function uploadDocument(formData: FormData) {
 
 export async function reprocessDocument(id: string) {
   return request<{ id: string; status: string }>(`/api/v1/documents/${id}/reprocess`, { method: "POST" });
+}
+
+export async function processUnprocessed() {
+  return request<{ queued: number; document_ids: string[] }>("/api/v1/processing/run-unprocessed", { method: "POST" });
 }
 
 export async function deleteDocument(id: string) {

@@ -5,7 +5,8 @@ import { uploadDocument } from "../api/client";
 
 export function UploadPage({ categories, onUploaded }: { categories: Categories | null; onUploaded: (id: string) => void }) {
   const [file, setFile] = useState<File | null>(null);
-  const [purpose, setPurpose] = useState("");
+  const [purpose, setPurpose] = useState("业务知识");
+  const [folderPath, setFolderPath] = useState("/");
   const [title, setTitle] = useState("");
   const [uploader, setUploader] = useState("");
   const [project, setProject] = useState("");
@@ -16,12 +17,13 @@ export function UploadPage({ categories, onUploaded }: { categories: Categories 
 
   async function submit() {
     if (!file || !purpose) {
-      setMessage("请选择文件和文件作用。");
+      setMessage("请选择文件。");
       return;
     }
     const body = new FormData();
     body.set("file", file);
     body.set("purpose", purpose);
+    body.set("folder_path", folderPath);
     body.set("title", title);
     body.set("uploader_name", uploader);
     body.set("project", project);
@@ -34,7 +36,7 @@ export function UploadPage({ categories, onUploaded }: { categories: Categories 
       onUploaded(result.id);
       setFile(null);
       setTitle("");
-      setMessage("上传成功，解析任务已开始。");
+      setMessage("上传成功。文件已进入未解析状态，可稍后在后台统一解析。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "上传失败。");
     } finally {
@@ -47,7 +49,7 @@ export function UploadPage({ categories, onUploaded }: { categories: Categories 
       <div className="sectionHeader">
         <div>
           <h2>上传资料</h2>
-          <p>为每份资料补充作用分类，系统会自动识别格式并生成 Agent 可读内容。</p>
+          <p>把原始文件放进对应文件夹。上传后不会自动解析，你可以每天在后台统一解析。</p>
         </div>
       </div>
       <div className="uploadLayout">
@@ -64,6 +66,10 @@ export function UploadPage({ categories, onUploaded }: { categories: Categories 
           />
         </label>
         <div className="formGrid">
+          <label>
+            文件夹路径
+            <input value={folderPath} onChange={(event) => setFolderPath(event.target.value)} placeholder="/政策法规/2026" />
+          </label>
           <label>
             文件作用
             <select value={purpose} onChange={(event) => setPurpose(event.target.value)}>
@@ -100,7 +106,7 @@ export function UploadPage({ categories, onUploaded }: { categories: Categories 
             </select>
           </label>
           <button className="primaryButton" onClick={submit} disabled={busy}>
-            {busy ? "上传中..." : "上传并解析"}
+            {busy ? "上传中..." : "上传原始文件"}
           </button>
           {message && <div className="formMessage">{message}</div>}
         </div>

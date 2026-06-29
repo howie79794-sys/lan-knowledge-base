@@ -185,6 +185,36 @@ h3 {
   margin-bottom: 14px;
 }
 
+.fileManagerFilters {
+  grid-template-columns: minmax(260px, 1fr) 140px 140px 42px;
+}
+
+.pathBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+
+.breadcrumb {
+  height: 34px;
+  border: 1px solid #ccd6df;
+  background: #ffffff;
+  color: #344456;
+  border-radius: 8px;
+  padding: 0 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.breadcrumb.active {
+  background: #e9f6f1;
+  border-color: #a7d7c6;
+  color: #17684f;
+  font-weight: 700;
+}
+
 .searchBox,
 select,
 input {
@@ -234,6 +264,38 @@ input {
 
 .tableWrap {
   overflow: auto;
+}
+
+.folderGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid #e1e8ef;
+}
+
+.folderCard {
+  min-height: 62px;
+  border: 1px solid #d6dee6;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #243241;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.folderCard:hover {
+  border-color: #20a67a;
+  background: #f0f8f5;
+}
+
+.folderCard svg {
+  color: #1f8f6b;
+  flex: 0 0 auto;
 }
 
 table {
@@ -372,6 +434,11 @@ tr:hover,
   background: #edf5f2;
   color: #17684f;
   border: 1px solid #c4ded4;
+}
+
+.secondaryButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .secondaryButton.dangerText {
@@ -573,6 +640,24 @@ pre {
   padding: 16px;
 }
 
+.processPanel {
+  background: #ffffff;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.processPanel p {
+  color: #64748b;
+  margin-top: 5px;
+  font-size: 13px;
+}
+
 .auditPanel h3 {
   margin-bottom: 12px;
 }
@@ -635,6 +720,10 @@ pre {
     grid-template-columns: 1fr;
   }
 
+  .fileManagerFilters {
+    grid-template-columns: 1fr;
+  }
+
   .formGrid {
     grid-template-columns: 1fr;
   }
@@ -667,7 +756,7 @@ pre {
 
   .metricStrip {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
     min-width: 0;
   }
@@ -696,5 +785,9 @@ pre {
   .detailActions {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .processPanel {
+    display: grid;
   }
 }

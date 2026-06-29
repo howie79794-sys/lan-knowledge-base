@@ -6,14 +6,16 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from app.core.config import ALLOWED_EXTENSIONS, DOCUMENT_PURPOSES
 from app.db.session import db_session
 from app.modules.audit.service import write_audit
-from app.modules.documents.schemas import CategoryResponse, DocumentListResponse
+from app.modules.documents.schemas import CategoryResponse, DocumentListResponse, FolderResponse
 from app.modules.documents.service import (
     content_file_path,
     create_document,
     get_document,
+    list_folder,
     list_documents,
     raw_file_path,
     soft_delete_document,
+    unprocessed_document_ids,
 )
 from app.workers.conversion_worker import process_document
 
@@ -31,26 +33,36 @@ def categories() -> CategoryResponse:
 
 @router.post("/documents")
 def upload_document(
-    background_tasks: BackgroundTasks,
     request: Request,
     file: UploadFile = File(...),
-    purpose: str = Form(...),
+    purpose: str = Form("业务知识"),
+    folder_path: str = Form("/"),
     title: str | None = Form(None),
     source: str | None = Form(None),
     project: str | None = Form(None),
     uploader_name: str | None = Form(None),
     confidentiality: str = Form("internal"),
 ):
-    document_id = create_document(file, purpose, title, source, project, uploader_name, confidentiality)
+    document_id = create_document(file, purpose, title, source, project, uploader_name, confidentiality, folder_path)
     write_audit("upload", document_id=document_id, actor=uploader_name, ip=request.client.host if request.client else None)
-    background_tasks.add_task(process_document, document_id)
     return {"id": document_id, "status": "uploaded"}
 
 
 @router.get("/documents", response_model=DocumentListResponse)
-def documents(purpose: str | None = None, format: str | None = None, q: str | None = None, status: str | None = None) -> DocumentListResponse:
-    total, rows = list_documents(purpose=purpose, file_format=format, q=q, status=status)
+def documents(
+    purpose: str | None = None,
+    format: str | None = None,
+    q: str | None = None,
+    status: str | None = None,
+    folder: str | None = None,
+) -> DocumentListResponse:
+    total, rows = list_documents(purpose=purpose, file_format=format, q=q, status=status, folder_path=folder)
     return DocumentListResponse(total=total, documents=rows)
+
+
+@router.get("/folders", response_model=FolderResponse)
+def folder(path: str = "/") -> FolderResponse:
+    return FolderResponse(**list_folder(path))
 
 
 @router.get("/documents/{document_id}")
@@ -79,6 +91,15 @@ def reprocess_document(document_id: str, background_tasks: BackgroundTasks):
     background_tasks.add_task(process_document, document_id)
     write_audit("reprocess", document_id=document_id)
     return {"id": document_id, "status": "queued"}
+
+
+@router.post("/processing/run-unprocessed")
+def process_unprocessed(background_tasks: BackgroundTasks, request: Request):
+    ids = unprocessed_document_ids()
+    for document_id in ids:
+        background_tasks.add_task(process_document, document_id)
+    write_audit("process_unprocessed", ip=request.client.host if request.client else None, message=f"queued={len(ids)}")
+    return {"queued": len(ids), "document_ids": ids}
 
 
 @router.delete("/documents/{document_id}")

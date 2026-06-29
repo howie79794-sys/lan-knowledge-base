@@ -6,8 +6,10 @@
 
 - Windows 台式机单机部署。
 - 局域网固定 IP 访问。
-- 支持 PDF、PPT、Excel、Word 等办公资料上传、分类、筛选和下载。
-- 按文件作用和文件格式进行分类。
+- 支持 PDF、PPT、Excel、Word 等办公资料上传、文件夹浏览和下载。
+- 网页主体验是文件管理器，大家只需要把原始文件上传到对应文件夹。
+- 上传后不自动解析，由管理员定期手动解析未解析文件。
+- 解析后的 Markdown/Text 独立存储在 processed 目录，供 Qoder Work 等 Agent 读取。
 - 为 Qoder Work 等 Agent 提供 OpenAPI、manifest、Markdown 正文和原文下载接口。
 
 ## 当前内容

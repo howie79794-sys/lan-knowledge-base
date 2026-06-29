@@ -1,7 +1,7 @@
-import { Copy, ExternalLink, RefreshCcw, Trash2 } from "lucide-react";
+import { ArrowUp, Copy, ExternalLink, Folder, RefreshCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Categories, DocumentDetail, DocumentSummary } from "../api/client";
-import { deleteDocument, fetchContent, fetchDocument, fetchDocuments, rawUrl, reprocessDocument } from "../api/client";
+import { deleteDocument, fetchContent, fetchDocument, fetchFolder, rawUrl, reprocessDocument } from "../api/client";
 import { DocumentFilters, type Filters } from "../components/DocumentFilters";
 import { DocumentTable } from "../components/DocumentTable";
 import { StatusBadge } from "../components/StatusBadge";
@@ -10,6 +10,8 @@ const defaultFilters: Filters = { purpose: "", format: "", status: "", q: "" };
 
 export function DocumentsPage({ categories, refreshKey }: { categories: Categories | null; refreshKey: number }) {
   const [filters, setFilters] = useState(defaultFilters);
+  const [currentPath, setCurrentPath] = useState("/");
+  const [folders, setFolders] = useState<{ name: string; path: string }[]>([]);
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
@@ -21,6 +23,7 @@ export function DocumentsPage({ categories, refreshKey }: { categories: Categori
     return {
       total: documents.length,
       ready: documents.filter((doc) => doc.status === "ready").length,
+      unprocessed: documents.filter((doc) => doc.status === "uploaded").length,
       failed: documents.filter((doc) => doc.status === "failed").length
     };
   }, [documents]);
@@ -28,9 +31,17 @@ export function DocumentsPage({ categories, refreshKey }: { categories: Categori
   async function loadDocuments() {
     setLoading(true);
     try {
-      const data = await fetchDocuments(filters);
-      setDocuments(data.documents);
-      if (!selectedId && data.documents[0]) setSelectedId(data.documents[0].id);
+      const data = await fetchFolder(currentPath);
+      let nextDocs = data.documents;
+      if (filters.format) nextDocs = nextDocs.filter((doc) => doc.file_format === filters.format);
+      if (filters.status) nextDocs = nextDocs.filter((doc) => doc.status === filters.status);
+      if (filters.q) {
+        const needle = filters.q.toLowerCase();
+        nextDocs = nextDocs.filter((doc) => `${doc.title} ${doc.original_filename}`.toLowerCase().includes(needle));
+      }
+      setFolders(data.folders);
+      setDocuments(nextDocs);
+      if (!nextDocs.some((doc) => doc.id === selectedId)) setSelectedId(nextDocs[0]?.id ?? null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "读取资料失败。");
     } finally {
@@ -40,7 +51,7 @@ export function DocumentsPage({ categories, refreshKey }: { categories: Categori
 
   useEffect(() => {
     loadDocuments();
-  }, [filters, refreshKey]);
+  }, [filters, refreshKey, currentPath]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -80,20 +91,50 @@ export function DocumentsPage({ categories, refreshKey }: { categories: Categori
     <section className="workspace">
       <div className="sectionHeader">
         <div>
-          <h2>资料总览</h2>
-          <p>按作用、格式、状态和关键词检索局域网资料。</p>
+          <h2>文件管理</h2>
+          <p>像网盘一样按文件夹查看大家上传的原始资料；解析产物单独存放给 Agent 使用。</p>
         </div>
         <div className="metricStrip">
           <span>总数 {stats.total}</span>
           <span>可读 {stats.ready}</span>
+          <span>未解析 {stats.unprocessed}</span>
           <span>失败 {stats.failed}</span>
         </div>
       </div>
-      <DocumentFilters categories={categories} filters={filters} onChange={setFilters} onRefresh={loadDocuments} />
+      <div className="pathBar">
+        <button className="iconButton" disabled={currentPath === "/"} onClick={() => setCurrentPath(parentPath(currentPath))} title="返回上级">
+          <ArrowUp size={17} />
+        </button>
+        <button className={currentPath === "/" ? "breadcrumb active" : "breadcrumb"} onClick={() => setCurrentPath("/")}>
+          全部文件
+        </button>
+        {currentPath
+          .split("/")
+          .filter(Boolean)
+          .map((part, index, parts) => {
+            const path = "/" + parts.slice(0, index + 1).join("/");
+            return (
+              <button key={path} className={path === currentPath ? "breadcrumb active" : "breadcrumb"} onClick={() => setCurrentPath(path)}>
+                {part}
+              </button>
+            );
+          })}
+      </div>
+      <DocumentFilters categories={categories} filters={filters} onChange={setFilters} onRefresh={loadDocuments} mode="file-manager" />
       {message && <div className="notice">{message}</div>}
       <div className="documentLayout">
         <div className="listPane">
           {loading && <div className="loadingLine">正在刷新资料...</div>}
+          {!!folders.length && (
+            <div className="folderGrid">
+              {folders.map((folder) => (
+                <button key={folder.path} className="folderCard" onClick={() => setCurrentPath(folder.path)}>
+                  <Folder size={22} />
+                  <span>{folder.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <DocumentTable
             documents={documents}
             selectedId={selectedId}
@@ -118,6 +159,10 @@ export function DocumentsPage({ categories, refreshKey }: { categories: Categori
                   <dd>{detail.purpose}</dd>
                 </div>
                 <div>
+                  <dt>所在文件夹</dt>
+                  <dd>{detail.folder_path}</dd>
+                </div>
+                <div>
                   <dt>文件格式</dt>
                   <dd>{detail.file_format}</dd>
                 </div>
@@ -131,7 +176,7 @@ export function DocumentsPage({ categories, refreshKey }: { categories: Categori
                 </div>
               </dl>
               <div className="detailActions">
-                <button className="secondaryButton" onClick={copyAgentLink}>
+                <button className="secondaryButton" onClick={copyAgentLink} disabled={detail.status !== "ready"}>
                   <Copy size={16} />
                   复制正文链接
                 </button>
@@ -151,7 +196,7 @@ export function DocumentsPage({ categories, refreshKey }: { categories: Categori
               {detail.error_message && <div className="errorBox">{detail.error_message}</div>}
               <div className="contentPreview">
                 <div className="previewTitle">Markdown 预览</div>
-                <pre>{content || "解析完成后，这里会显示 Agent 可读正文。"}</pre>
+                <pre>{content || "还没有解析。你可以在后台管理页统一解析所有未解析文件。"}</pre>
               </div>
             </>
           ) : (
@@ -161,4 +206,10 @@ export function DocumentsPage({ categories, refreshKey }: { categories: Categori
       </div>
     </section>
   );
+}
+
+function parentPath(path: string) {
+  const parts = path.split("/").filter(Boolean);
+  parts.pop();
+  return parts.length ? `/${parts.join("/")}` : "/";
 }

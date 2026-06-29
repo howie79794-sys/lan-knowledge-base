@@ -7,6 +7,7 @@ class DocumentSummary(BaseModel):
     original_filename: str
     file_format: str
     file_ext: str
+    folder_path: str
     size_bytes: int
     status: str
     purpose: str
@@ -26,3 +27,15 @@ class DocumentListResponse(BaseModel):
 class CategoryResponse(BaseModel):
     purposes: list[str]
     formats: list[str]
+
+
+class FolderEntry(BaseModel):
+    name: str
+    path: str
+
+
+class FolderResponse(BaseModel):
+    path: str
+    parent: str | None
+    folders: list[FolderEntry]
+    documents: list[DocumentSummary]

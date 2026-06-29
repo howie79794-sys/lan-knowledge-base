@@ -2,7 +2,7 @@ import { AlertCircle, CheckCircle2, Clock, LoaderCircle } from "lucide-react";
 import type { DocumentSummary } from "../api/client";
 
 const statusText: Record<DocumentSummary["status"], string> = {
-  uploaded: "已上传",
+  uploaded: "未解析",
   processing: "解析中",
   ready: "可读取",
   failed: "解析失败",

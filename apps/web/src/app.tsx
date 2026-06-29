@@ -32,7 +32,7 @@ export function App() {
         <nav>
           <button className={view === "documents" ? "active" : ""} onClick={() => setView("documents")}>
             <FolderOpen size={18} />
-            资料总览
+            文件管理
           </button>
           <button className={view === "upload" ? "active" : ""} onClick={() => setView("upload")}>
             <Upload size={18} />

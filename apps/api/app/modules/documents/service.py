@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
-import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -35,6 +33,18 @@ def normalize_upload(file: UploadFile, purpose: str) -> tuple[str, str, str]:
     return filename, ext, ALLOWED_EXTENSIONS[ext]
 
 
+def normalize_folder_path(folder_path: str | None) -> str:
+    value = (folder_path or "/").strip().replace("\\", "/")
+    if not value:
+        return "/"
+    parts = [part.strip() for part in value.split("/") if part.strip()]
+    if any(part in {".", ".."} for part in parts):
+        raise HTTPException(status_code=400, detail="文件夹路径不能包含 . 或 ..。")
+    if not parts:
+        return "/"
+    return "/" + "/".join(parts)
+
+
 def create_document(
     file: UploadFile,
     purpose: str,
@@ -43,8 +53,10 @@ def create_document(
     project: str | None,
     uploader_name: str | None,
     confidentiality: str,
+    folder_path: str | None,
 ) -> str:
     filename, ext, file_format = normalize_upload(file, purpose)
+    normalized_folder = normalize_folder_path(folder_path)
     document_id = f"doc_{uuid4().hex}"
     now = utc_now()
     date_dir = datetime.now().strftime("%Y/%m")
@@ -74,9 +86,9 @@ def create_document(
             """
             INSERT INTO documents (
                 id, title, original_filename, file_ext, file_format, mime_type, size_bytes,
-                checksum_sha256, storage_path, status, created_at, updated_at
+                checksum_sha256, storage_path, folder_path, status, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploaded', ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploaded', ?, ?)
             """,
             (
                 document_id,
@@ -88,6 +100,7 @@ def create_document(
                 written,
                 checksum,
                 str(storage_path),
+                normalized_folder,
                 now,
                 now,
             ),
@@ -111,6 +124,7 @@ def row_to_summary(row) -> dict:
         "original_filename": row["original_filename"],
         "file_format": row["file_format"],
         "file_ext": row["file_ext"],
+        "folder_path": row["folder_path"],
         "size_bytes": row["size_bytes"],
         "status": row["status"],
         "purpose": row["purpose"],
@@ -123,9 +137,18 @@ def row_to_summary(row) -> dict:
     }
 
 
-def list_documents(purpose: str | None, file_format: str | None, q: str | None, status: str | None) -> tuple[int, list[dict]]:
+def list_documents(
+    purpose: str | None,
+    file_format: str | None,
+    q: str | None,
+    status: str | None,
+    folder_path: str | None = None,
+) -> tuple[int, list[dict]]:
     filters = ["d.status != 'deleted'"]
     params: list[str] = []
+    if folder_path is not None:
+        filters.append("d.folder_path = ?")
+        params.append(normalize_folder_path(folder_path))
     if purpose:
         filters.append("m.purpose = ?")
         params.append(purpose)
@@ -152,6 +175,55 @@ def list_documents(purpose: str | None, file_format: str | None, q: str | None, 
             params,
         ).fetchall()
     return len(rows), [row_to_summary(row) for row in rows]
+
+
+def list_folder(folder_path: str | None) -> dict:
+    current = normalize_folder_path(folder_path)
+    prefix = "/" if current == "/" else f"{current}/"
+    with db_session() as conn:
+        folder_rows = conn.execute(
+            "SELECT DISTINCT folder_path FROM documents WHERE status != 'deleted' ORDER BY folder_path ASC"
+        ).fetchall()
+        doc_rows = conn.execute(
+            """
+            SELECT d.*, m.purpose, m.uploader_name, m.confidentiality
+            FROM documents d
+            JOIN document_metadata m ON m.document_id = d.id
+            WHERE d.status != 'deleted' AND d.folder_path = ?
+            ORDER BY d.updated_at DESC
+            """,
+            (current,),
+        ).fetchall()
+
+    child_folders: dict[str, str] = {}
+    for row in folder_rows:
+        path = row["folder_path"]
+        if path == current or not path.startswith(prefix):
+            continue
+        rest = path[len(prefix) :]
+        child = rest.split("/", 1)[0]
+        child_path = f"/{child}" if current == "/" else f"{current}/{child}"
+        child_folders[child] = child_path
+
+    parent = None
+    if current != "/":
+        parent_parts = current.strip("/").split("/")[:-1]
+        parent = "/" + "/".join(parent_parts) if parent_parts else "/"
+
+    return {
+        "path": current,
+        "parent": parent,
+        "folders": [{"name": name, "path": path} for name, path in sorted(child_folders.items())],
+        "documents": [row_to_summary(row) for row in doc_rows],
+    }
+
+
+def unprocessed_document_ids() -> list[str]:
+    with db_session() as conn:
+        rows = conn.execute(
+            "SELECT id FROM documents WHERE status = 'uploaded' ORDER BY created_at ASC"
+        ).fetchall()
+    return [row["id"] for row in rows]
 
 
 def get_document(document_id: str) -> dict:

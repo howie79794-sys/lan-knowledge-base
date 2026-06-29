@@ -1,18 +1,36 @@
 import { Activity, Database, KeyRound, Network } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AuditLog } from "../api/client";
-import { fetchAuditLogs, fetchHealth } from "../api/client";
+import { fetchAuditLogs, fetchDocuments, fetchHealth, processUnprocessed } from "../api/client";
 
 export function AdminPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [health, setHealth] = useState<string>("检测中");
+  const [unprocessed, setUnprocessed] = useState(0);
+  const [message, setMessage] = useState("");
 
-  useEffect(() => {
+  async function load() {
     fetchHealth()
       .then((data) => setHealth(data.ok ? "正常" : "异常"))
       .catch(() => setHealth("异常"));
     fetchAuditLogs().then((data) => setLogs(data.logs)).catch(() => setLogs([]));
+    fetchDocuments({ status: "uploaded" }).then((data) => setUnprocessed(data.total)).catch(() => setUnprocessed(0));
+  }
+
+  useEffect(() => {
+    load();
   }, []);
+
+  async function runProcessing() {
+    setMessage("正在提交解析任务...");
+    try {
+      const result = await processUnprocessed();
+      setMessage(`已提交 ${result.queued} 个未解析文件。解析产物会写入 processed 目录。`);
+      window.setTimeout(load, 1000);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "提交解析任务失败。");
+    }
+  }
 
   return (
     <section className="workspace">
@@ -40,10 +58,18 @@ export function AdminPage() {
         </div>
         <div className="adminTile">
           <Database size={22} />
-          <span>数据目录</span>
-          <strong>/data/kb</strong>
+          <span>未解析文件</span>
+          <strong>{unprocessed}</strong>
         </div>
       </div>
+      <div className="processPanel">
+        <div>
+          <h3>手动解析</h3>
+          <p>只处理还没有解析过的文件。解析后的 Markdown/Text 会独立存放在 processed 目录，供 Agent 后续读取。</p>
+        </div>
+        <button className="primaryButton" onClick={runProcessing}>解析未解析文件</button>
+      </div>
+      {message && <div className="notice">{message}</div>}
       <div className="auditPanel">
         <h3>最近操作</h3>
         <table>

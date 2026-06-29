@@ -41,6 +41,7 @@ def init_db() -> None:
                 size_bytes INTEGER NOT NULL,
                 checksum_sha256 TEXT NOT NULL,
                 storage_path TEXT NOT NULL,
+                folder_path TEXT NOT NULL DEFAULT '/',
                 status TEXT NOT NULL,
                 content_excerpt TEXT,
                 search_text TEXT,
@@ -99,3 +100,7 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
             """
         )
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(documents)").fetchall()}
+        if "folder_path" not in columns:
+            conn.execute("ALTER TABLE documents ADD COLUMN folder_path TEXT NOT NULL DEFAULT '/'")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_folder ON documents(folder_path)")

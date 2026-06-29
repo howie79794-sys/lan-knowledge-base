@@ -21,7 +21,7 @@ def verify_agent_token(authorization: str | None) -> None:
 @router.get("/manifest")
 def manifest(request: Request, authorization: str | None = Header(default=None)):
     verify_agent_token(authorization)
-    _, rows = list_documents(purpose=None, file_format=None, q=None, status=None)
+    _, rows = list_documents(purpose=None, file_format=None, q=None, status="ready")
     base_url = str(request.base_url).rstrip("/")
     docs = []
     for row in rows:
@@ -30,6 +30,7 @@ def manifest(request: Request, authorization: str | None = Header(default=None))
                 "id": row["id"],
                 "title": row["title"],
                 "purpose": row["purpose"],
+                "folder_path": row["folder_path"],
                 "file_format": row["file_format"],
                 "size_bytes": row["size_bytes"],
                 "status": row["status"],
