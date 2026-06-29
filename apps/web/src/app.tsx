@@ -1,12 +1,13 @@
-import { Database, FolderOpen, Settings, Upload } from "lucide-react";
+import { Database, FolderOpen, Library, Settings, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Categories } from "./api/client";
 import { fetchCategories } from "./api/client";
 import { AdminPage } from "./pages/AdminPage";
 import { DocumentsPage } from "./pages/DocumentsPage";
+import { KnowledgePage } from "./pages/KnowledgePage";
 import { UploadPage } from "./pages/UploadPage";
 
-type View = "documents" | "upload" | "admin";
+type View = "documents" | "upload" | "knowledge" | "admin";
 
 export function App() {
   const [view, setView] = useState<View>("documents");
@@ -30,6 +31,7 @@ export function App() {
           </div>
         </div>
         <nav>
+          <div className="navSectionLabel">原始文件</div>
           <button className={view === "documents" ? "active" : ""} onClick={() => setView("documents")}>
             <FolderOpen size={18} />
             文件管理
@@ -38,19 +40,26 @@ export function App() {
             <Upload size={18} />
             上传资料
           </button>
+          <div className="navSectionLabel">解析知识</div>
+          <button className={view === "knowledge" ? "active" : ""} onClick={() => setView("knowledge")}>
+            <Library size={18} />
+            知识管理
+          </button>
+          <div className="navSectionLabel">系统</div>
           <button className={view === "admin" ? "active" : ""} onClick={() => setView("admin")}>
             <Settings size={18} />
             后台管理
           </button>
         </nav>
         <div className="agentBox">
-          <span>Agent 入口</span>
+          <span>Agent 读取知识</span>
           <code>/api/v1/manifest</code>
           <code>/openapi.json</code>
         </div>
       </aside>
       <main className="mainArea">
         {view === "documents" && <DocumentsPage categories={categories} refreshKey={refreshKey} />}
+        {view === "knowledge" && <KnowledgePage />}
         {view === "upload" && (
           <UploadPage
             categories={categories}

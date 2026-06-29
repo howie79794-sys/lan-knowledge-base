@@ -89,6 +89,14 @@ export async function fetchFolder(path: string) {
   return request<FolderResponse>(`/api/v1/folders?path=${encodeURIComponent(path)}`);
 }
 
+export async function fetchKnowledge(filters: { q?: string; folder?: string }) {
+  const params = new URLSearchParams();
+  if (filters.q) params.set("q", filters.q);
+  if (filters.folder) params.set("folder", filters.folder);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return request<{ total: number; documents: DocumentSummary[] }>(`/api/v1/knowledge${suffix}`);
+}
+
 export async function fetchDocument(id: string) {
   return request<DocumentDetail>(`/api/v1/documents/${id}`);
 }

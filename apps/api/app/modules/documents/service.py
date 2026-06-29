@@ -226,6 +226,31 @@ def unprocessed_document_ids() -> list[str]:
     return [row["id"] for row in rows]
 
 
+def list_knowledge(q: str | None = None, folder_path: str | None = None) -> tuple[int, list[dict]]:
+    filters = ["d.status = 'ready'"]
+    params: list[str] = []
+    if folder_path:
+        filters.append("d.folder_path = ?")
+        params.append(normalize_folder_path(folder_path))
+    if q:
+        filters.append("(d.title LIKE ? OR d.original_filename LIKE ? OR d.search_text LIKE ?)")
+        needle = f"%{q}%"
+        params.extend([needle, needle, needle])
+    where_clause = " AND ".join(filters)
+    with db_session() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT d.*, m.purpose, m.uploader_name, m.confidentiality
+            FROM documents d
+            JOIN document_metadata m ON m.document_id = d.id
+            WHERE {where_clause}
+            ORDER BY d.updated_at DESC
+            """,
+            params,
+        ).fetchall()
+    return len(rows), [row_to_summary(row) for row in rows]
+
+
 def get_document(document_id: str) -> dict:
     with db_session() as conn:
         row = conn.execute(

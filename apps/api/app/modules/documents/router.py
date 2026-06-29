@@ -11,6 +11,7 @@ from app.modules.documents.service import (
     content_file_path,
     create_document,
     get_document,
+    list_knowledge,
     list_folder,
     list_documents,
     raw_file_path,
@@ -69,6 +70,12 @@ def folder(path: str = "/") -> FolderResponse:
 def document_detail(document_id: str):
     doc = get_document(document_id)
     return doc
+
+
+@router.get("/knowledge", response_model=DocumentListResponse)
+def knowledge(q: str | None = None, folder: str | None = None) -> DocumentListResponse:
+    total, rows = list_knowledge(q=q, folder_path=folder)
+    return DocumentListResponse(total=total, documents=rows)
 
 
 @router.get("/documents/{document_id}/raw")
