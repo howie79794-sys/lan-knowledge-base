@@ -1,0 +1,28 @@
+services:
+  api:
+    build:
+      context: ./apps/api
+    env_file: .env
+    volumes:
+      - ${KB_HOST_DATA_DIR:-./data}:/data/kb
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./apps/web
+    expose:
+      - "80"
+    restart: unless-stopped
+
+  proxy:
+    image: caddy:2.8
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - api
+      - web
+    restart: unless-stopped

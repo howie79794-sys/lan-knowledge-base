@@ -12,10 +12,36 @@
 
 ## 当前内容
 
-目前仓库先保存项目规划和部署方案：
+目前仓库包含可运行 MVP 代码、项目规划和部署方案：
 
 - [局域网知识库本地 MVP 方案](docs/local-mvp-plan.md)
 - [Windows 台式机部署手册](docs/windows-deployment-guide.md)
+
+## 本地开发预览
+
+后端：
+
+```bash
+cd apps/api
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+KB_DATA_DIR=../../data KB_UPLOAD_DIR=../../data/uploads KB_PROCESSED_DIR=../../data/processed KB_SQLITE_PATH=../../data/kb.sqlite3 uvicorn app.main:app --reload --port 8000
+```
+
+前端：
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+浏览器访问：
+
+```text
+http://localhost:5173
+```
 
 ## 推荐部署路线
 
@@ -36,6 +62,7 @@ D:\kb-data\              上传资料、解析结果、SQLite 数据库和备份
 
 ```powershell
 cd D:\lan-knowledge-base
+copy .env.example .env
 docker compose up -d --build
 ```
 
@@ -50,4 +77,3 @@ http://台式机局域网IP
 - `main`：稳定可部署版本。
 - `.env`、数据库、上传资料、解析产物和备份不会提交到 GitHub。
 - 真实业务资料应保存在 Windows 台式机的数据目录，例如 `D:\kb-data\`。
-
