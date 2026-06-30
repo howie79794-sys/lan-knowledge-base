@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
 
-from app.core.config import ALLOWED_EXTENSIONS, DOCUMENT_PURPOSES, settings
+from app.core.config import ALLOWED_EXTENSIONS, DOCUMENT_PURPOSES, PURPOSE_ALIASES, settings
 from app.db.session import db_session
 
 
@@ -43,6 +43,16 @@ def normalize_folder_path(folder_path: str | None) -> str:
     if not parts:
         return "/"
     return "/" + "/".join(parts)
+
+
+def purpose_filter_values(purpose: str) -> list[str]:
+    values = [purpose]
+    values.extend(old for old, new in PURPOSE_ALIASES.items() if new == purpose)
+    return values
+
+
+def display_purpose(purpose: str) -> str:
+    return PURPOSE_ALIASES.get(purpose, purpose)
 
 
 def create_document(
@@ -127,7 +137,7 @@ def row_to_summary(row) -> dict:
         "folder_path": row["folder_path"],
         "size_bytes": row["size_bytes"],
         "status": row["status"],
-        "purpose": row["purpose"],
+        "purpose": display_purpose(row["purpose"]),
         "uploader_name": row["uploader_name"],
         "confidentiality": row["confidentiality"],
         "content_excerpt": row["content_excerpt"],
@@ -150,8 +160,9 @@ def list_documents(
         filters.append("d.folder_path = ?")
         params.append(normalize_folder_path(folder_path))
     if purpose:
-        filters.append("m.purpose = ?")
-        params.append(purpose)
+        values = purpose_filter_values(purpose)
+        filters.append(f"m.purpose IN ({','.join('?' for _ in values)})")
+        params.extend(values)
     if file_format:
         filters.append("d.file_format = ?")
         params.append(file_format)
@@ -233,8 +244,9 @@ def list_knowledge(q: str | None = None, folder_path: str | None = None, purpose
         filters.append("d.folder_path = ?")
         params.append(normalize_folder_path(folder_path))
     if purpose:
-        filters.append("m.purpose = ?")
-        params.append(purpose)
+        values = purpose_filter_values(purpose)
+        filters.append(f"m.purpose IN ({','.join('?' for _ in values)})")
+        params.extend(values)
     if q:
         filters.append("(d.title LIKE ? OR d.original_filename LIKE ? OR d.search_text LIKE ?)")
         needle = f"%{q}%"
@@ -267,7 +279,9 @@ def get_document(document_id: str) -> dict:
         ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="文件不存在。")
-    return dict(row)
+    result = dict(row)
+    result["purpose"] = display_purpose(result["purpose"])
+    return result
 
 
 def raw_file_path(document_id: str) -> Path:

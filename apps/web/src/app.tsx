@@ -8,12 +8,11 @@ import { KnowledgePage } from "./pages/KnowledgePage";
 
 const FALLBACK_PURPOSES = [
   "招投标需求清单",
-  "用户详细需求清单",
   "规划材料",
   "政策法规",
   "产品社区文档",
   "业务知识",
-  "客户案例",
+  "客户或特性案例",
   "业务材料",
   "其他"
 ];

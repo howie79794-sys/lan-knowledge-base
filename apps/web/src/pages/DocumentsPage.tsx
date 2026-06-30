@@ -27,7 +27,7 @@ export function DocumentsPage({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [folderPath, setFolderPath] = useState(`/${purpose}`);
   const [title, setTitle] = useState("");
   const [uploader, setUploader] = useState("");
@@ -92,28 +92,32 @@ export function DocumentsPage({
   }, [selectedId]);
 
   async function handleUpload() {
-    if (!file) {
+    if (!files.length) {
       setMessage("请选择要上传的文件。");
       return;
     }
-    const body = new FormData();
-    body.set("file", file);
-    body.set("purpose", purpose);
-    body.set("folder_path", folderPath || `/${purpose}`);
-    body.set("title", title);
-    body.set("uploader_name", uploader);
-    body.set("project", project);
-    body.set("source", source);
-    body.set("confidentiality", confidentiality);
     setUploading(true);
     setMessage("");
     try {
-      const result = await uploadDocument(body);
-      setFile(null);
+      const uploadedIds: string[] = [];
+      for (const selectedFile of files) {
+        const body = new FormData();
+        body.set("file", selectedFile);
+        body.set("purpose", purpose);
+        body.set("folder_path", folderPath || `/${purpose}`);
+        body.set("title", files.length === 1 ? title : "");
+        body.set("uploader_name", uploader);
+        body.set("project", project);
+        body.set("source", source);
+        body.set("confidentiality", confidentiality);
+        const result = await uploadDocument(body);
+        uploadedIds.push(result.id);
+      }
+      setFiles([]);
       setTitle("");
-      setMessage(`已上传到「${purpose}」，当前状态为未解析。`);
+      setMessage(`已上传 ${uploadedIds.length} 个文件到「${purpose}」，当前状态为未解析。`);
       onUploaded();
-      await loadDocuments(result.id);
+      await loadDocuments(uploadedIds[uploadedIds.length - 1]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "上传失败。");
     } finally {
@@ -179,14 +183,15 @@ export function DocumentsPage({
             </div>
             <label className="dropzone compactDropzone">
               <UploadCloud size={28} />
-              <span>{file ? file.name : "选择文件"}</span>
-              <small>上传后先保存为原始文件</small>
+              <span>{files.length ? selectedFileLabel(files) : "选择文件（可多选）"}</span>
+              <small>上传后先保存为原始文件，批量上传默认使用各自文件名</small>
               <input
                 type="file"
+                multiple
                 onChange={(event) => {
-                  const nextFile = event.target.files?.[0] ?? null;
-                  setFile(nextFile);
-                  if (!title && nextFile) setTitle(nextFile.name.replace(/\.[^.]+$/, ""));
+                  const nextFiles = Array.from(event.target.files ?? []);
+                  setFiles(nextFiles);
+                  if (!title && nextFiles.length === 1) setTitle(nextFiles[0].name.replace(/\.[^.]+$/, ""));
                 }}
               />
             </label>
@@ -197,7 +202,7 @@ export function DocumentsPage({
               </label>
               <label>
                 标题
-                <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="默认使用文件名" />
+                <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="单文件可填写；多文件默认使用各自文件名" />
               </label>
               <label>
                 上传人
@@ -220,7 +225,7 @@ export function DocumentsPage({
                 </select>
               </label>
               <button className="primaryButton" onClick={handleUpload} disabled={uploading}>
-                {uploading ? "上传中..." : "上传到当前分类"}
+                {uploading ? "上传中..." : files.length > 1 ? `上传 ${files.length} 个文件` : "上传到当前分类"}
               </button>
             </div>
           </div>
@@ -289,4 +294,10 @@ export function DocumentsPage({
       </div>
     </section>
   );
+}
+
+function selectedFileLabel(files: File[]) {
+  if (files.length === 1) return files[0].name;
+  const firstName = files[0]?.name ?? "";
+  return `已选择 ${files.length} 个文件，首个：${firstName}`;
 }
