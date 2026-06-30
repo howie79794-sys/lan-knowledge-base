@@ -1,4 +1,4 @@
-import { Database, FileText, Library, Settings } from "lucide-react";
+import { ChevronDown, Database, FileText, Library, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Categories } from "./api/client";
 import { fetchCategories } from "./api/client";
@@ -23,6 +23,11 @@ type View = "raw" | "knowledge" | "admin";
 export function App() {
   const [view, setView] = useState<View>("raw");
   const [selectedPurpose, setSelectedPurpose] = useState("招投标需求清单");
+  const [expandedSections, setExpandedSections] = useState({
+    raw: true,
+    knowledge: true,
+    admin: true
+  });
   const [categories, setCategories] = useState<Categories | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -31,6 +36,10 @@ export function App() {
   }, []);
 
   const purposes = categories?.purposes?.length ? categories.purposes : FALLBACK_PURPOSES;
+
+  function toggleSection(section: keyof typeof expandedSections) {
+    setExpandedSections((current) => ({ ...current, [section]: !current[section] }));
+  }
 
   return (
     <div className="appShell">
@@ -44,40 +53,90 @@ export function App() {
             <span>LAN Knowledge Base</span>
           </div>
         </div>
-        <nav>
-          <div className="navSectionLabel">原始文件</div>
-          {purposes.map((purpose) => (
+        <nav className="treeNav">
+          <div className={view === "raw" ? "navGroup parentActive" : "navGroup"}>
             <button
-              key={`raw-${purpose}`}
-              className={view === "raw" && selectedPurpose === purpose ? "active" : ""}
-              onClick={() => {
-                setView("raw");
-                setSelectedPurpose(purpose);
-              }}
+              className="navParent"
+              onClick={() => toggleSection("raw")}
+              aria-expanded={expandedSections.raw}
+              aria-controls="raw-nav"
             >
-              <FileText size={16} />
-              {purpose}
+              <span>
+                <FileText size={18} />
+                原始文件
+              </span>
+              <ChevronDown className={expandedSections.raw ? "chevron expanded" : "chevron"} size={17} />
             </button>
-          ))}
-          <div className="navSectionLabel">知识管理</div>
-          {purposes.map((purpose) => (
+            {expandedSections.raw && (
+              <div className="navChildren" id="raw-nav">
+                {purposes.map((purpose) => (
+                  <button
+                    key={`raw-${purpose}`}
+                    className={view === "raw" && selectedPurpose === purpose ? "navItem level2 active" : "navItem level2"}
+                    onClick={() => {
+                      setView("raw");
+                      setSelectedPurpose(purpose);
+                    }}
+                  >
+                    {purpose}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className={view === "knowledge" ? "navGroup parentActive" : "navGroup"}>
             <button
-              key={`knowledge-${purpose}`}
-              className={view === "knowledge" && selectedPurpose === purpose ? "active" : ""}
-              onClick={() => {
-                setView("knowledge");
-                setSelectedPurpose(purpose);
-              }}
+              className="navParent"
+              onClick={() => toggleSection("knowledge")}
+              aria-expanded={expandedSections.knowledge}
+              aria-controls="knowledge-nav"
             >
-              <Library size={16} />
-              {purpose}
+              <span>
+                <Library size={18} />
+                知识管理
+              </span>
+              <ChevronDown className={expandedSections.knowledge ? "chevron expanded" : "chevron"} size={17} />
             </button>
-          ))}
-          <div className="navSectionLabel">后台管理</div>
-          <button className={view === "admin" ? "active" : ""} onClick={() => setView("admin")}>
-            <Settings size={18} />
-            后台管理
-          </button>
+            {expandedSections.knowledge && (
+              <div className="navChildren" id="knowledge-nav">
+                {purposes.map((purpose) => (
+                  <button
+                    key={`knowledge-${purpose}`}
+                    className={view === "knowledge" && selectedPurpose === purpose ? "navItem level2 active" : "navItem level2"}
+                    onClick={() => {
+                      setView("knowledge");
+                      setSelectedPurpose(purpose);
+                    }}
+                  >
+                    {purpose}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className={view === "admin" ? "navGroup parentActive" : "navGroup"}>
+            <button
+              className="navParent"
+              onClick={() => toggleSection("admin")}
+              aria-expanded={expandedSections.admin}
+              aria-controls="admin-nav"
+            >
+              <span>
+                <Settings size={18} />
+                后台管理
+              </span>
+              <ChevronDown className={expandedSections.admin ? "chevron expanded" : "chevron"} size={17} />
+            </button>
+            {expandedSections.admin && (
+              <div className="navChildren" id="admin-nav">
+                <button className={view === "admin" ? "navItem level2 active" : "navItem level2"} onClick={() => setView("admin")}>
+                  服务与解析
+                </button>
+              </div>
+            )}
+          </div>
         </nav>
         <div className="agentBox">
           <span>Agent 读取知识</span>

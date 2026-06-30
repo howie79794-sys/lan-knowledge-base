@@ -73,41 +73,112 @@ a {
   margin-top: 2px;
 }
 
-nav {
+.treeNav {
   display: grid;
-  gap: 4px;
+  align-content: start;
+  gap: 10px;
   overflow: auto;
   padding-right: 4px;
   flex: 1;
   min-height: 0;
 }
 
-.navSectionLabel {
-  color: #7f8c99;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 12px 10px 2px;
+.navGroup {
+  display: grid;
+  gap: 4px;
 }
 
-nav button {
+.navParent,
+.navItem {
+  width: 100%;
   border: 0;
   background: transparent;
   color: #cbd5df;
-  min-height: 36px;
-  padding: 7px 10px;
   border-radius: 8px;
   display: flex;
   align-items: center;
-  gap: 10px;
   cursor: pointer;
   text-align: left;
   line-height: 1.25;
 }
 
-nav button.active,
-nav button:hover {
+.navParent {
+  min-height: 44px;
+  padding: 0 10px;
+  justify-content: space-between;
+  color: #f2f6fa;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.navParent span {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.navParent svg {
+  flex: 0 0 auto;
+}
+
+.chevron {
+  color: #91a0af;
+  transform: rotate(-90deg);
+  transition: transform 0.16s ease, color 0.16s ease;
+}
+
+.chevron.expanded {
+  transform: rotate(0deg);
+  color: #d7e0e8;
+}
+
+.navChildren {
+  display: grid;
+  gap: 2px;
+  padding: 2px 0 4px 18px;
+  margin-left: 17px;
+  border-left: 1px solid #334150;
+}
+
+.navItem {
+  min-height: 32px;
+  padding: 6px 10px;
+  justify-content: flex-start;
+  color: #aebbc7;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.navItem.level2 {
+  padding-left: 12px;
+}
+
+.navItem.level3 {
+  margin-left: 10px;
+  padding-left: 18px;
+  color: #92a2b0;
+  font-size: 12px;
+}
+
+nav button {
+  border: 0;
+}
+
+.navParent:hover,
+.navGroup.parentActive > .navParent {
+  background: #202c38;
+}
+
+.navItem.active,
+.navItem:hover {
   background: #263340;
   color: #ffffff;
+}
+
+.navItem.active {
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 #20a67a;
 }
 
 .agentBox {
@@ -860,8 +931,8 @@ pre {
     padding: 12px;
   }
 
-  nav {
-    grid-template-columns: repeat(3, 1fr);
+  .treeNav {
+    max-height: 420px;
   }
 
   .agentBox {
@@ -916,9 +987,9 @@ pre {
     grid-template-columns: 1fr;
   }
 
-  nav button {
+  .navParent,
+  .navItem {
     justify-content: flex-start;
-    padding: 0 8px;
   }
 
   .brand {
@@ -938,12 +1009,8 @@ pre {
     font-size: 16px;
   }
 
-  nav {
-    grid-template-columns: 1fr;
-  }
-
-  .navSectionLabel {
-    padding-top: 8px;
+  .treeNav {
+    max-height: none;
   }
 
   .metricStrip {
