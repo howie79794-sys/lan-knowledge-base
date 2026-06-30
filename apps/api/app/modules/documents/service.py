@@ -226,12 +226,15 @@ def unprocessed_document_ids() -> list[str]:
     return [row["id"] for row in rows]
 
 
-def list_knowledge(q: str | None = None, folder_path: str | None = None) -> tuple[int, list[dict]]:
+def list_knowledge(q: str | None = None, folder_path: str | None = None, purpose: str | None = None) -> tuple[int, list[dict]]:
     filters = ["d.status = 'ready'"]
     params: list[str] = []
     if folder_path:
         filters.append("d.folder_path = ?")
         params.append(normalize_folder_path(folder_path))
+    if purpose:
+        filters.append("m.purpose = ?")
+        params.append(purpose)
     if q:
         filters.append("(d.title LIKE ? OR d.original_filename LIKE ? OR d.search_text LIKE ?)")
         needle = f"%{q}%"

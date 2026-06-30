@@ -29,7 +29,7 @@ a {
 
 .appShell {
   display: grid;
-  grid-template-columns: 264px minmax(0, 1fr);
+  grid-template-columns: 292px minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -40,6 +40,9 @@ a {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  max-height: 100vh;
+  position: sticky;
+  top: 0;
 }
 
 .brand {
@@ -72,7 +75,11 @@ a {
 
 nav {
   display: grid;
-  gap: 8px;
+  gap: 4px;
+  overflow: auto;
+  padding-right: 4px;
+  flex: 1;
+  min-height: 0;
 }
 
 .navSectionLabel {
@@ -86,14 +93,15 @@ nav button {
   border: 0;
   background: transparent;
   color: #cbd5df;
-  height: 42px;
-  padding: 0 12px;
+  min-height: 36px;
+  padding: 7px 10px;
   border-radius: 8px;
   display: flex;
   align-items: center;
   gap: 10px;
   cursor: pointer;
   text-align: left;
+  line-height: 1.25;
 }
 
 nav button.active,
@@ -253,7 +261,7 @@ input {
 
 .documentLayout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 390px;
+  grid-template-columns: minmax(0, 1fr) 400px;
   gap: 16px;
   align-items: start;
 }
@@ -271,10 +279,18 @@ input {
 .auditPanel,
 .formGrid,
 .dropzone,
-.adminTile {
+.adminTile,
+.uploadCard {
   background: #ffffff;
   border: 1px solid #d9e1e8;
   border-radius: 8px;
+}
+
+.sidePanelStack {
+  display: grid;
+  gap: 16px;
+  position: sticky;
+  top: 24px;
 }
 
 .tableWrap {
@@ -321,6 +337,58 @@ input {
   padding: 14px;
   display: grid;
   gap: 16px;
+}
+
+.knowledgeCard {
+  border: 1px solid #d8e1e8;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.knowledgeCard:hover,
+.knowledgeCard.selected {
+  border-color: #20a67a;
+  background: #f0f8f5;
+}
+
+.knowledgeCardHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.knowledgeCardHeader strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.knowledgeCard p {
+  color: #425466;
+  font-size: 13px;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.knowledgeCardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.knowledgeCardMeta span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .knowledgeGroup {
@@ -524,9 +592,7 @@ tr:hover,
 
 .detailPane {
   padding: 16px;
-  min-height: 560px;
-  position: sticky;
-  top: 24px;
+  min-height: 360px;
 }
 
 .detailTop {
@@ -664,6 +730,51 @@ pre {
   color: #6d7c8a;
 }
 
+.uploadCard {
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.panelTitle {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.panelTitle span {
+  border-radius: 999px;
+  background: #e9f6f1;
+  color: #17684f;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.compactDropzone {
+  min-height: 132px;
+  padding: 16px;
+}
+
+.compactForm {
+  display: grid;
+  gap: 10px;
+}
+
+.compactForm label {
+  display: grid;
+  gap: 6px;
+  color: #536170;
+  font-size: 13px;
+}
+
+.compactForm input,
+.compactForm select {
+  width: 100%;
+}
+
 .formGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -764,7 +875,8 @@ pre {
     grid-template-columns: 1fr;
   }
 
-  .detailPane {
+  .detailPane,
+  .sidePanelStack {
     position: static;
   }
 }

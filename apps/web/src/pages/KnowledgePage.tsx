@@ -1,10 +1,10 @@
-import { Copy, Database, ExternalLink, Search } from "lucide-react";
+import { Copy, Database, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { DocumentSummary } from "../api/client";
-import { fetchContent, fetchDocument, fetchKnowledge, rawUrl, type DocumentDetail } from "../api/client";
+import { fetchContent, fetchDocument, fetchKnowledge, type DocumentDetail } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
 
-export function KnowledgePage() {
+export function KnowledgePage({ purpose }: { purpose: string }) {
   const [q, setQ] = useState("");
   const [items, setItems] = useState<DocumentSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -12,17 +12,16 @@ export function KnowledgePage() {
   const [content, setContent] = useState("");
   const [message, setMessage] = useState("");
 
-  const grouped = useMemo(() => {
-    const groups = new Map<string, DocumentSummary[]>();
-    for (const item of items) {
-      const key = item.folder_path || "/";
-      groups.set(key, [...(groups.get(key) ?? []), item]);
-    }
-    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b, "zh-CN"));
+  const overview = useMemo(() => {
+    return {
+      total: items.length,
+      folders: new Set(items.map((item) => item.folder_path || "/")).size,
+      sources: new Set(items.map((item) => item.original_filename)).size
+    };
   }, [items]);
 
   async function load() {
-    const data = await fetchKnowledge({ q });
+    const data = await fetchKnowledge({ q, purpose });
     setItems(data.documents);
     if (!data.documents.some((item) => item.id === selectedId)) {
       setSelectedId(data.documents[0]?.id ?? null);
@@ -30,8 +29,15 @@ export function KnowledgePage() {
   }
 
   useEffect(() => {
+    setSelectedId(null);
+    setDetail(null);
+    setContent("");
+    setMessage("");
+  }, [purpose]);
+
+  useEffect(() => {
     load().catch((error) => setMessage(error instanceof Error ? error.message : "读取知识失败。"));
-  }, [q]);
+  }, [q, purpose]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -54,42 +60,48 @@ export function KnowledgePage() {
     <section className="workspace">
       <div className="sectionHeader">
         <div>
-          <h2>知识管理</h2>
-          <p>管理由原始文件解析生成的知识内容。未来 Agent 只需要读取这里的知识。</p>
+          <h2>知识管理 · {purpose}</h2>
+          <p>当前类型的解析知识概览；Agent 后续读取这里的 Markdown/Text 产物。</p>
         </div>
         <div className="metricStrip">
-          <span>知识 {items.length}</span>
-          <span>来源 {new Set(items.map((item) => item.id)).size}</span>
+          <span>知识 {overview.total}</span>
+          <span>路径 {overview.folders}</span>
+          <span>来源 {overview.sources}</span>
         </div>
       </div>
+
       <div className="knowledgeToolbar">
         <label className="searchBox">
           <Search size={17} />
           <input value={q} onChange={(event) => setQ(event.target.value)} placeholder="搜索知识标题、来源文件或正文" />
         </label>
       </div>
+
       {message && <div className="notice">{message}</div>}
+
       <div className="knowledgeLayout">
         <div className="knowledgeList">
           {!items.length && (
             <div className="emptyState">
               <Database size={28} />
-              <p>还没有可用知识。请先在后台解析未解析文件。</p>
+              <p>这个分类下还没有解析好的知识。请先到对应原始文件分类上传，再到后台统一解析。</p>
             </div>
           )}
-          {grouped.map(([folder, docs]) => (
-            <div className="knowledgeGroup" key={folder}>
-              <div className="knowledgeFolder">{folder}</div>
-              {docs.map((item) => (
-                <button key={item.id} className={selectedId === item.id ? "knowledgeItem selected" : "knowledgeItem"} onClick={() => setSelectedId(item.id)}>
-                  <strong>{item.title}</strong>
-                  <span>{item.original_filename}</span>
-                  <StatusBadge status={item.status} />
-                </button>
-              ))}
-            </div>
+          {items.map((item) => (
+            <button key={item.id} className={selectedId === item.id ? "knowledgeCard selected" : "knowledgeCard"} onClick={() => setSelectedId(item.id)}>
+              <div className="knowledgeCardHeader">
+                <strong>{item.title}</strong>
+                <StatusBadge status={item.status} />
+              </div>
+              <p>{item.content_excerpt || "这条知识还没有可展示的概览。"}</p>
+              <div className="knowledgeCardMeta">
+                <span>{item.original_filename}</span>
+                <span>{item.folder_path}</span>
+              </div>
+            </button>
           ))}
         </div>
+
         <aside className="detailPane">
           {detail ? (
             <>
@@ -102,16 +114,16 @@ export function KnowledgePage() {
               </div>
               <dl className="detailGrid">
                 <div>
+                  <dt>知识类型</dt>
+                  <dd>{detail.purpose}</dd>
+                </div>
+                <div>
                   <dt>知识路径</dt>
                   <dd>{detail.folder_path}</dd>
                 </div>
                 <div>
-                  <dt>来源类型</dt>
+                  <dt>来源格式</dt>
                   <dd>{detail.file_format}</dd>
-                </div>
-                <div>
-                  <dt>文件作用</dt>
-                  <dd>{detail.purpose}</dd>
                 </div>
                 <div>
                   <dt>上传人</dt>
@@ -123,18 +135,14 @@ export function KnowledgePage() {
                   <Copy size={16} />
                   复制知识链接
                 </button>
-                <a className="secondaryButton" href={rawUrl(detail.id)}>
-                  <ExternalLink size={16} />
-                  查看原文件
-                </a>
               </div>
               <div className="contentPreview">
-                <div className="previewTitle">知识正文 Markdown</div>
-                <pre>{content}</pre>
+                <div className="previewTitle">知识正文概览</div>
+                <pre>{content || detail.content_excerpt || "暂无可展示内容。"}</pre>
               </div>
             </>
           ) : (
-            <div className="emptyDetail">选择一条知识查看内容。</div>
+            <div className="emptyDetail">选择一条知识查看概览。</div>
           )}
         </aside>
       </div>

@@ -73,8 +73,8 @@ def document_detail(document_id: str):
 
 
 @router.get("/knowledge", response_model=DocumentListResponse)
-def knowledge(q: str | None = None, folder: str | None = None) -> DocumentListResponse:
-    total, rows = list_knowledge(q=q, folder_path=folder)
+def knowledge(q: str | None = None, folder: str | None = None, purpose: str | None = None) -> DocumentListResponse:
+    total, rows = list_knowledge(q=q, folder_path=folder, purpose=purpose)
     return DocumentListResponse(total=total, documents=rows)
 
 
