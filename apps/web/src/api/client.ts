@@ -76,10 +76,17 @@ export async function fetchCategories() {
   return request<Categories>("/api/v1/categories");
 }
 
-export async function fetchDocuments(filters: { purpose?: string; format?: string; q?: string; status?: string }) {
+export async function fetchDocuments(filters: {
+  purpose?: string;
+  format?: string;
+  q?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
-    if (value) params.set(key, value);
+    if (value !== undefined && value !== "") params.set(key, String(value));
   });
   const suffix = params.toString() ? `?${params.toString()}` : "";
   return request<{ total: number; documents: DocumentSummary[] }>(`/api/v1/documents${suffix}`);

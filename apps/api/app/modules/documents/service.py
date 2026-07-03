@@ -153,9 +153,13 @@ def list_documents(
     q: str | None,
     status: str | None,
     folder_path: str | None = None,
+    limit: int = 30,
+    offset: int = 0,
 ) -> tuple[int, list[dict]]:
     filters = ["d.status != 'deleted'"]
     params: list[str] = []
+    safe_limit = min(max(limit, 1), 100)
+    safe_offset = max(offset, 0)
     if folder_path is not None:
         filters.append("d.folder_path = ?")
         params.append(normalize_folder_path(folder_path))
@@ -175,6 +179,15 @@ def list_documents(
         params.extend([needle, needle, needle])
     where_clause = " AND ".join(filters)
     with db_session() as conn:
+        total = conn.execute(
+            f"""
+            SELECT COUNT(*) AS count
+            FROM documents d
+            JOIN document_metadata m ON m.document_id = d.id
+            WHERE {where_clause}
+            """,
+            params,
+        ).fetchone()["count"]
         rows = conn.execute(
             f"""
             SELECT d.*, m.purpose, m.uploader_name, m.confidentiality
@@ -182,10 +195,11 @@ def list_documents(
             JOIN document_metadata m ON m.document_id = d.id
             WHERE {where_clause}
             ORDER BY d.updated_at DESC
+            LIMIT ? OFFSET ?
             """,
-            params,
+            [*params, safe_limit, safe_offset],
         ).fetchall()
-    return len(rows), [row_to_summary(row) for row in rows]
+    return total, [row_to_summary(row) for row in rows]
 
 
 def list_folder(folder_path: str | None) -> dict:

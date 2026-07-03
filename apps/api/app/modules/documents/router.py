@@ -56,8 +56,18 @@ def documents(
     q: str | None = None,
     status: str | None = None,
     folder: str | None = None,
+    limit: int = 30,
+    offset: int = 0,
 ) -> DocumentListResponse:
-    total, rows = list_documents(purpose=purpose, file_format=format, q=q, status=status, folder_path=folder)
+    total, rows = list_documents(
+        purpose=purpose,
+        file_format=format,
+        q=q,
+        status=status,
+        folder_path=folder,
+        limit=limit,
+        offset=offset,
+    )
     return DocumentListResponse(total=total, documents=rows)
 
 

@@ -1,4 +1,4 @@
-import { Copy, Download, RefreshCcw, Trash2, UploadCloud } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Download, RefreshCcw, Trash2, UploadCloud } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Categories, DocumentDetail, DocumentSummary } from "../api/client";
 import { deleteDocument, fetchContent, fetchDocument, fetchDocuments, rawUrl, reprocessDocument, uploadDocument } from "../api/client";
@@ -7,6 +7,7 @@ import { DocumentTable } from "../components/DocumentTable";
 import { StatusBadge } from "../components/StatusBadge";
 
 const defaultFilters: Filters = { purpose: "", format: "", status: "", q: "" };
+const PAGE_SIZE_OPTIONS = [20, 50, 100];
 
 export function DocumentsPage({
   categories,
@@ -21,6 +22,9 @@ export function DocumentsPage({
 }) {
   const [filters, setFilters] = useState(defaultFilters);
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
+  const [totalDocuments, setTotalDocuments] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [content, setContent] = useState("");
@@ -38,12 +42,17 @@ export function DocumentsPage({
 
   const stats = useMemo(() => {
     return {
-      total: documents.length,
+      total: totalDocuments,
+      pageTotal: documents.length,
       ready: documents.filter((doc) => doc.status === "ready").length,
       unprocessed: documents.filter((doc) => doc.status === "uploaded").length,
       failed: documents.filter((doc) => doc.status === "failed").length
     };
-  }, [documents]);
+  }, [documents, totalDocuments]);
+
+  const totalPages = Math.max(1, Math.ceil(totalDocuments / pageSize));
+  const pageStart = totalDocuments ? (page - 1) * pageSize + 1 : 0;
+  const pageEnd = Math.min(page * pageSize, totalDocuments);
 
   async function loadDocuments(nextSelectedId?: string) {
     setLoading(true);
@@ -52,8 +61,11 @@ export function DocumentsPage({
         purpose,
         format: filters.format,
         status: filters.status,
-        q: filters.q
+        q: filters.q,
+        limit: pageSize,
+        offset: (page - 1) * pageSize
       });
+      setTotalDocuments(data.total);
       setDocuments(data.documents);
       const preferredId = nextSelectedId ?? selectedId;
       if (!data.documents.some((doc) => doc.id === preferredId)) setSelectedId(data.documents[0]?.id ?? null);
@@ -71,11 +83,20 @@ export function DocumentsPage({
     setContent("");
     setFolderPath(`/${purpose}`);
     setMessage("");
+    setPage(1);
   }, [purpose]);
 
   useEffect(() => {
     loadDocuments();
-  }, [filters, refreshKey, purpose]);
+  }, [filters, refreshKey, purpose, page, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters.format, filters.status, filters.q, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -154,9 +175,9 @@ export function DocumentsPage({
         </div>
         <div className="metricStrip">
           <span>总数 {stats.total}</span>
+          <span>本页 {stats.pageTotal}</span>
           <span>可读 {stats.ready}</span>
           <span>未解析 {stats.unprocessed}</span>
-          <span>失败 {stats.failed}</span>
         </div>
       </div>
 
@@ -165,6 +186,22 @@ export function DocumentsPage({
 
       <div className="documentLayout">
         <div className="listPane">
+          <div className="listToolbar">
+            <div>
+              <strong>{totalDocuments ? `${pageStart}-${pageEnd}` : "0"} / {totalDocuments}</strong>
+              <span>按更新时间倒序</span>
+            </div>
+            <label>
+              每页
+              <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
+                {PAGE_SIZE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           {loading && <div className="loadingLine">正在刷新资料...</div>}
           <DocumentTable
             documents={documents}
@@ -173,6 +210,17 @@ export function DocumentsPage({
             onReprocess={handleReprocess}
             onDelete={handleDelete}
           />
+          <div className="paginationBar">
+            <button className="iconButton" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page <= 1}>
+              <ChevronLeft size={17} />
+            </button>
+            <span>
+              第 {page} / {totalPages} 页
+            </span>
+            <button className="iconButton" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page >= totalPages}>
+              <ChevronRight size={17} />
+            </button>
+          </div>
         </div>
 
         <aside className="sidePanelStack">
