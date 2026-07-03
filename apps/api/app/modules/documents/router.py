@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 
 from app.core.config import ALLOWED_EXTENSIONS, DOCUMENT_PURPOSES
 from app.db.session import db_session
-from app.modules.audit.service import write_audit
+from app.modules.audit.service import AUDITED_ACTIONS, write_audit
 from app.modules.documents.schemas import CategoryResponse, DocumentListResponse, FolderResponse
 from app.modules.documents.service import (
     content_file_path,
@@ -90,7 +90,6 @@ def knowledge(q: str | None = None, folder: str | None = None, purpose: str | No
 @router.get("/documents/{document_id}/raw")
 def download_raw(document_id: str, request: Request):
     doc = get_document(document_id)
-    write_audit("download", document_id=document_id, ip=request.client.host if request.client else None)
     return FileResponse(raw_file_path(document_id), filename=doc["original_filename"])
 
 
@@ -111,7 +110,8 @@ def reprocess_document(document_id: str, request: Request):
 @router.post("/processing/run-unprocessed")
 def process_unprocessed(request: Request):
     result = create_batch_parse_jobs(document_ids=None, purpose=None, limit=10000, include_failed=False, requested_by="web")
-    write_audit("create_parse_jobs_batch", ip=request.client.host if request.client else None, message=f"queued={result['queued']}")
+    if result["queued"]:
+        write_audit("create_parse_jobs_batch", ip=request.client.host if request.client else None, message=f"queued={result['queued']}")
     return {"queued": result["queued"], "document_ids": result["document_ids"], "job_ids": result["job_ids"]}
 
 
@@ -125,5 +125,14 @@ def delete_document(document_id: str):
 @router.get("/audit-logs")
 def audit_logs():
     with db_session() as conn:
-        rows = conn.execute("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 100").fetchall()
+        actions = sorted(AUDITED_ACTIONS)
+        rows = conn.execute(
+            f"""
+            SELECT * FROM audit_logs
+            WHERE action IN ({','.join('?' for _ in actions)})
+            ORDER BY created_at DESC
+            LIMIT 100
+            """,
+            actions,
+        ).fetchall()
     return {"logs": [dict(row) for row in rows]}

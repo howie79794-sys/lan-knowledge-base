@@ -1,4 +1,4 @@
-import { Activity, Database, KeyRound, Network } from "lucide-react";
+import { Activity, Database, KeyRound, Network, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AuditLog, ParseQueueItem } from "../api/client";
 import { fetchAuditLogs, fetchHealth, fetchParseQueue, processUnprocessed } from "../api/client";
@@ -6,6 +6,8 @@ import { StatusBadge } from "../components/StatusBadge";
 
 export function AdminPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [showAudit, setShowAudit] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [queueItems, setQueueItems] = useState<ParseQueueItem[]>([]);
   const [queueTotal, setQueueTotal] = useState(0);
   const [health, setHealth] = useState<string>("检测中");
@@ -20,7 +22,6 @@ export function AdminPage() {
     fetchHealth()
       .then((data) => setHealth(data.ok ? "正常" : "异常"))
       .catch(() => setHealth("异常"));
-    fetchAuditLogs().then((data) => setLogs(data.logs)).catch(() => setLogs([]));
     fetchParseQueue()
       .then((data) => {
         setQueueItems(data.items);
@@ -47,13 +48,27 @@ export function AdminPage() {
     }
   }
 
+  async function openAuditLogs() {
+    setShowAudit(true);
+    setAuditLoading(true);
+    try {
+      const data = await fetchAuditLogs();
+      setLogs(data.logs);
+    } catch {
+      setLogs([]);
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
   return (
     <section className="workspace">
       <div className="sectionHeader">
         <div>
           <h2>后台管理</h2>
-          <p>查看服务状态、Agent 入口和最近操作记录。</p>
+          <p>查看服务状态、解析队列和 Qoder Work 任务入口。</p>
         </div>
+        <button className="secondaryButton" onClick={openAuditLogs}>最近操作</button>
       </div>
       <div className="adminGrid">
         <div className="adminTile">
@@ -154,38 +169,64 @@ export function AdminPage() {
         </div>
         {queueTotal > queueItems.length && <div className="queueFootnote">当前只显示前 {queueItems.length} 条，共 {queueTotal} 条。</div>}
       </div>
-      <div className="auditPanel">
-        <h3>最近操作</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>时间</th>
-              <th>动作</th>
-              <th>资料 ID</th>
-              <th>操作者</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.map((log) => (
-              <tr key={log.id}>
-                <td>{new Date(log.created_at).toLocaleString("zh-CN")}</td>
-                <td>{log.action}</td>
-                <td>{log.document_id || "-"}</td>
-                <td>{log.actor || log.ip || "-"}</td>
-              </tr>
-            ))}
-            {!logs.length && (
-              <tr>
-                <td colSpan={4}>暂无操作记录。</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {showAudit && (
+        <div className="modalBackdrop" role="dialog" aria-modal="true" aria-label="最近操作日志">
+          <div className="auditModal">
+            <div className="modalHeader">
+              <div>
+                <h3>最近操作</h3>
+                <p>只记录上传、删除、创建解析任务、解析完成和解析失败等关键事件。</p>
+              </div>
+              <button className="iconButton" onClick={() => setShowAudit(false)} title="关闭">
+                <X size={17} />
+              </button>
+            </div>
+            <div className="tableWrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>动作</th>
+                    <th>资料 ID</th>
+                    <th>操作者</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.map((log) => (
+                    <tr key={log.id}>
+                      <td>{new Date(log.created_at).toLocaleString("zh-CN")}</td>
+                      <td>{auditActionLabel(log.action)}</td>
+                      <td>{log.document_id || "-"}</td>
+                      <td>{log.actor || log.ip || "-"}</td>
+                    </tr>
+                  ))}
+                  {!logs.length && (
+                    <tr>
+                      <td colSpan={4}>{auditLoading ? "正在加载..." : "暂无关键操作记录。"}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
 
 function shortId(value: string) {
   return value.length > 14 ? `${value.slice(0, 10)}...` : value;
+}
+
+function auditActionLabel(action: string) {
+  const labels: Record<string, string> = {
+    upload: "上传文件",
+    delete: "删除文件",
+    create_parse_job: "创建单文件解析任务",
+    create_parse_jobs_batch: "批量创建解析任务",
+    complete_parse_job: "解析完成",
+    fail_parse_job: "解析失败"
+  };
+  return labels[action] ?? action;
 }

@@ -1027,6 +1027,41 @@ pre {
   margin-bottom: 12px;
 }
 
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(15, 23, 32, 0.48);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auditModal {
+  width: min(960px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: auto;
+  background: #ffffff;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(15, 23, 32, 0.25);
+  padding: 16px;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.modalHeader p {
+  color: #64748b;
+  font-size: 13px;
+  margin-top: 5px;
+}
+
 @media (max-width: 1120px) {
   .appShell {
     grid-template-columns: 1fr;

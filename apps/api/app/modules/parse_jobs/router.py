@@ -53,11 +53,12 @@ def create_parse_jobs_batch(payload: BatchCreateParseJobsRequest, request: Reque
         include_failed=payload.include_failed,
         requested_by=payload.requested_by or "web",
     )
-    write_audit(
-        "create_parse_jobs_batch",
-        ip=request.client.host if request.client else None,
-        message=f"queued={result['queued']}",
-    )
+    if result["queued"]:
+        write_audit(
+            "create_parse_jobs_batch",
+            ip=request.client.host if request.client else None,
+            message=f"queued={result['queued']}",
+        )
     return result
 
 
@@ -75,7 +76,6 @@ def claim_parse_jobs(
 ):
     verify_worker_token(authorization)
     jobs = claim_next_jobs(limit=limit, worker=worker, request=request)
-    write_audit("claim_parse_jobs", actor=worker, ip=request.client.host if request.client else None, message=f"claimed={len(jobs)}")
     return {"jobs": jobs}
 
 
