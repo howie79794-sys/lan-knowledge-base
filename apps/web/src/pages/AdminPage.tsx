@@ -1,22 +1,35 @@
 import { Activity, Database, KeyRound, Network } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { AuditLog } from "../api/client";
-import { fetchAuditLogs, fetchDocuments, fetchHealth, processUnprocessed } from "../api/client";
+import type { AuditLog, ParseQueueItem } from "../api/client";
+import { fetchAuditLogs, fetchHealth, fetchParseQueue, processUnprocessed } from "../api/client";
+import { StatusBadge } from "../components/StatusBadge";
 
 export function AdminPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [queueItems, setQueueItems] = useState<ParseQueueItem[]>([]);
+  const [queueTotal, setQueueTotal] = useState(0);
   const [health, setHealth] = useState<string>("检测中");
-  const [unprocessed, setUnprocessed] = useState(0);
-  const [queued, setQueued] = useState(0);
   const [message, setMessage] = useState("");
+
+  const unprocessed = queueItems.filter((item) => item.document_status === "uploaded").length;
+  const queued = queueItems.filter((item) => item.document_status === "queued").length;
+  const processing = queueItems.filter((item) => item.document_status === "processing").length;
+  const failed = queueItems.filter((item) => item.document_status === "failed").length;
 
   async function load() {
     fetchHealth()
       .then((data) => setHealth(data.ok ? "正常" : "异常"))
       .catch(() => setHealth("异常"));
     fetchAuditLogs().then((data) => setLogs(data.logs)).catch(() => setLogs([]));
-    fetchDocuments({ status: "uploaded" }).then((data) => setUnprocessed(data.total)).catch(() => setUnprocessed(0));
-    fetchDocuments({ status: "queued" }).then((data) => setQueued(data.total)).catch(() => setQueued(0));
+    fetchParseQueue()
+      .then((data) => {
+        setQueueItems(data.items);
+        setQueueTotal(data.total);
+      })
+      .catch(() => {
+        setQueueItems([]);
+        setQueueTotal(0);
+      });
   }
 
   useEffect(() => {
@@ -27,7 +40,7 @@ export function AdminPage() {
     setMessage("正在创建解析任务...");
     try {
       const result = await processUnprocessed();
-      setMessage(`已创建 ${result.queued} 个解析任务。Qoder Work 可通过 /api/v1/parse-jobs/next 领取任务。`);
+      setMessage(`已把 ${result.queued} 个未解析文件加入队列。Qoder Work 只会领取队列中的文件。`);
       window.setTimeout(load, 1000);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "提交解析任务失败。");
@@ -64,11 +77,21 @@ export function AdminPage() {
           <strong>{unprocessed}</strong>
         </div>
       </div>
-      <div className="adminGrid compactAdminGrid">
+      <div className="adminGrid queueMetricGrid">
         <div className="adminTile">
           <Database size={22} />
-          <span>待 Qoder 领取</span>
+          <span>队列中</span>
           <strong>{queued}</strong>
+        </div>
+        <div className="adminTile">
+          <Activity size={22} />
+          <span>解析中</span>
+          <strong>{processing}</strong>
+        </div>
+        <div className="adminTile">
+          <Activity size={22} />
+          <span>解析失败</span>
+          <strong>{failed}</strong>
         </div>
         <div className="adminTile">
           <Network size={22} />
@@ -79,11 +102,58 @@ export function AdminPage() {
       <div className="processPanel">
         <div>
           <h3>创建解析任务</h3>
-          <p>只把未解析文件加入任务队列，不在网站进程里解析。Qoder Work 领取任务后生成 Markdown/Text 并回写 processed 目录。</p>
+          <p>把所有“未解析”文件加入队列，不在网站进程里解析。Qoder Work 只领取“队列中”的文件，完成后文件会从下方队列移到知识管理。</p>
         </div>
         <button className="primaryButton" onClick={runProcessing}>创建未解析文件任务</button>
       </div>
       {message && <div className="notice">{message}</div>}
+      <div className="queuePanel">
+        <div className="queuePanelHeader">
+          <div>
+            <h3>解析队列</h3>
+            <p>展示所有尚未解析完成的文件；解析成功后会自动从这里移除。</p>
+          </div>
+          <button className="secondaryButton" onClick={load}>刷新队列</button>
+        </div>
+        <div className="tableWrap">
+          <table>
+            <thead>
+              <tr>
+                <th>文件</th>
+                <th>类型</th>
+                <th>状态</th>
+                <th>任务</th>
+                <th>Qoder Worker</th>
+                <th>更新时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              {queueItems.map((item) => (
+                <tr key={item.document_id}>
+                  <td>
+                    <div className="docTitle">{item.title}</div>
+                    <div className="docMeta">{item.original_filename}</div>
+                    {item.error_message && <div className="queueError">{item.error_message}</div>}
+                  </td>
+                  <td>{item.purpose}</td>
+                  <td>
+                    <StatusBadge status={item.document_status} />
+                  </td>
+                  <td>{item.job_id ? shortId(item.job_id) : "未入队"}</td>
+                  <td>{item.worker || "-"}</td>
+                  <td>{new Date(item.job_updated_at || item.document_updated_at).toLocaleString("zh-CN")}</td>
+                </tr>
+              ))}
+              {!queueItems.length && (
+                <tr>
+                  <td colSpan={6}>当前没有待解析、队列中、解析中或失败的文件。</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {queueTotal > queueItems.length && <div className="queueFootnote">当前只显示前 {queueItems.length} 条，共 {queueTotal} 条。</div>}
+      </div>
       <div className="auditPanel">
         <h3>最近操作</h3>
         <table>
@@ -114,4 +184,8 @@ export function AdminPage() {
       </div>
     </section>
   );
+}
+
+function shortId(value: string) {
+  return value.length > 14 ? `${value.slice(0, 10)}...` : value;
 }

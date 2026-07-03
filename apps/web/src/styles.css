@@ -941,6 +941,10 @@ pre {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.queueMetricGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .adminTile {
   min-height: 112px;
   padding: 16px;
@@ -962,8 +966,43 @@ pre {
   overflow-wrap: anywhere;
 }
 
-.auditPanel {
+.auditPanel,
+.queuePanel {
   padding: 16px;
+}
+
+.queuePanel {
+  background: #ffffff;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.queuePanelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.queuePanelHeader p {
+  color: #64748b;
+  font-size: 13px;
+  margin-top: 5px;
+}
+
+.queueError {
+  color: #a33c3c;
+  font-size: 12px;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+
+.queueFootnote {
+  color: #64748b;
+  font-size: 12px;
+  padding-top: 10px;
 }
 
 .processPanel {

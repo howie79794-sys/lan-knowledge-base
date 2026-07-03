@@ -116,6 +116,72 @@ def create_batch_parse_jobs(
     }
 
 
+def list_parse_queue(limit: int = 200, offset: int = 0) -> dict:
+    safe_limit = min(max(limit, 1), 500)
+    safe_offset = max(offset, 0)
+    with db_session() as conn:
+        total = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM documents
+            WHERE status IN ('uploaded', 'queued', 'processing', 'failed')
+            """
+        ).fetchone()["count"]
+        rows = conn.execute(
+            """
+            SELECT d.id AS document_id, d.title, d.original_filename, d.file_format,
+                   d.folder_path, d.size_bytes, d.status AS document_status,
+                   d.updated_at AS document_updated_at, m.purpose,
+                   j.id AS job_id, j.status AS job_status, j.worker, j.attempts,
+                   j.error_message, j.updated_at AS job_updated_at
+            FROM documents d
+            JOIN document_metadata m ON m.document_id = d.id
+            LEFT JOIN parse_jobs j ON j.id = (
+                SELECT id
+                FROM parse_jobs
+                WHERE document_id = d.id
+                ORDER BY created_at DESC
+                LIMIT 1
+            )
+            WHERE d.status IN ('uploaded', 'queued', 'processing', 'failed')
+            ORDER BY
+                CASE d.status
+                    WHEN 'processing' THEN 1
+                    WHEN 'queued' THEN 2
+                    WHEN 'uploaded' THEN 3
+                    WHEN 'failed' THEN 4
+                    ELSE 5
+                END,
+                d.updated_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (safe_limit, safe_offset),
+        ).fetchall()
+    return {
+        "total": total,
+        "items": [
+            {
+                "document_id": row["document_id"],
+                "title": row["title"],
+                "original_filename": row["original_filename"],
+                "file_format": row["file_format"],
+                "folder_path": row["folder_path"],
+                "purpose": display_purpose(row["purpose"]),
+                "size_bytes": row["size_bytes"],
+                "document_status": row["document_status"],
+                "document_updated_at": row["document_updated_at"],
+                "job_id": row["job_id"],
+                "job_status": row["job_status"],
+                "worker": row["worker"],
+                "attempts": row["attempts"],
+                "error_message": row["error_message"],
+                "job_updated_at": row["job_updated_at"],
+            }
+            for row in rows
+        ],
+    }
+
+
 def claim_next_jobs(limit: int, worker: str | None, request: Request) -> list[dict]:
     safe_limit = min(max(limit, 1), 20)
     now = utc_now()

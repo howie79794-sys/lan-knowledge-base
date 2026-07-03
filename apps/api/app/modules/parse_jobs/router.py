@@ -10,6 +10,7 @@ from app.modules.parse_jobs.schemas import (
     ClaimParseJobsResponse,
     CompleteParseJobRequest,
     FailParseJobRequest,
+    ParseQueueResponse,
     ParseJobSummary,
 )
 from app.modules.parse_jobs.service import (
@@ -18,6 +19,7 @@ from app.modules.parse_jobs.service import (
     create_batch_parse_jobs,
     create_parse_job,
     fail_parse_job,
+    list_parse_queue,
 )
 
 
@@ -59,6 +61,11 @@ def create_parse_jobs_batch(payload: BatchCreateParseJobsRequest, request: Reque
     return result
 
 
+@router.get("/parse-jobs/queue", response_model=ParseQueueResponse)
+def parse_queue(limit: int = 200, offset: int = 0):
+    return list_parse_queue(limit=limit, offset=offset)
+
+
 @router.get("/parse-jobs/next", response_model=ClaimParseJobsResponse)
 def claim_parse_jobs(
     request: Request,
@@ -86,4 +93,3 @@ def fail_job(job_id: str, payload: FailParseJobRequest, request: Request, author
     job = fail_parse_job(job_id, error_message=payload.error_message, worker=payload.worker)
     write_audit("fail_parse_job", document_id=job["document_id"], actor=payload.worker, ip=request.client.host if request.client else None, message=job_id)
     return job
-

@@ -27,6 +27,29 @@ class ParseJobWorkItem(ParseJobSummary):
     raw_path: str
 
 
+class ParseQueueItem(BaseModel):
+    document_id: str
+    title: str
+    original_filename: str
+    file_format: str
+    folder_path: str
+    purpose: str
+    size_bytes: int
+    document_status: str
+    document_updated_at: str
+    job_id: str | None = None
+    job_status: str | None = None
+    worker: str | None = None
+    attempts: int | None = None
+    error_message: str | None = None
+    job_updated_at: str | None = None
+
+
+class ParseQueueResponse(BaseModel):
+    total: int
+    items: list[ParseQueueItem]
+
+
 class BatchCreateParseJobsRequest(BaseModel):
     document_ids: list[str] | None = None
     purpose: str | None = None

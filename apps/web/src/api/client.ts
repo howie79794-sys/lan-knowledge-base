@@ -51,6 +51,24 @@ export type AuditLog = {
   created_at: string;
 };
 
+export type ParseQueueItem = {
+  document_id: string;
+  title: string;
+  original_filename: string;
+  file_format: string;
+  folder_path: string;
+  purpose: string;
+  size_bytes: number;
+  document_status: DocumentSummary["status"];
+  document_updated_at: string;
+  job_id?: string | null;
+  job_status?: string | null;
+  worker?: string | null;
+  attempts?: number | null;
+  error_message?: string | null;
+  job_updated_at?: string | null;
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -142,6 +160,10 @@ export async function createParseJobsBatch(payload: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   });
+}
+
+export async function fetchParseQueue() {
+  return request<{ total: number; items: ParseQueueItem[] }>("/api/v1/parse-jobs/queue?limit=500");
 }
 
 export async function deleteDocument(id: string) {

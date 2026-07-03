@@ -110,7 +110,7 @@ def reprocess_document(document_id: str, request: Request):
 
 @router.post("/processing/run-unprocessed")
 def process_unprocessed(request: Request):
-    result = create_batch_parse_jobs(document_ids=None, purpose=None, limit=100, include_failed=False, requested_by="web")
+    result = create_batch_parse_jobs(document_ids=None, purpose=None, limit=10000, include_failed=False, requested_by="web")
     write_audit("create_parse_jobs_batch", ip=request.client.host if request.client else None, message=f"queued={result['queued']}")
     return {"queued": result["queued"], "document_ids": result["document_ids"], "job_ids": result["job_ids"]}
 
