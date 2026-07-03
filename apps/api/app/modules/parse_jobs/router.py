@@ -15,6 +15,7 @@ from app.modules.parse_jobs.schemas import (
 )
 from app.modules.parse_jobs.service import (
     claim_next_jobs,
+    cancel_queued_parse_job,
     complete_parse_job,
     create_batch_parse_jobs,
     create_parse_job,
@@ -77,6 +78,13 @@ def claim_parse_jobs(
     verify_worker_token(authorization)
     jobs = claim_next_jobs(limit=limit, worker=worker, request=request)
     return {"jobs": jobs}
+
+
+@router.delete("/parse-jobs/{job_id}", response_model=ParseJobSummary)
+def cancel_job(job_id: str, request: Request):
+    job = cancel_queued_parse_job(job_id)
+    write_audit("cancel_parse_job", document_id=job["document_id"], ip=request.client.host if request.client else None, message=job_id)
+    return job
 
 
 @router.post("/parse-jobs/{job_id}/complete", response_model=ParseJobSummary)

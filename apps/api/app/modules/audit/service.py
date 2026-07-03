@@ -8,6 +8,7 @@ AUDITED_ACTIONS = {
     "delete",
     "create_parse_job",
     "create_parse_jobs_batch",
+    "cancel_parse_job",
     "complete_parse_job",
     "fail_parse_job",
 }

@@ -1,7 +1,7 @@
 import { Activity, Database, KeyRound, Network, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AuditLog, ParseQueueItem } from "../api/client";
-import { fetchAuditLogs, fetchHealth, fetchParseQueue, processUnprocessed } from "../api/client";
+import { cancelParseJob, fetchAuditLogs, fetchHealth, fetchParseQueue, processUnprocessed } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
 
 export function AdminPage() {
@@ -10,6 +10,7 @@ export function AdminPage() {
   const [auditLoading, setAuditLoading] = useState(false);
   const [queueItems, setQueueItems] = useState<ParseQueueItem[]>([]);
   const [queueTotal, setQueueTotal] = useState(0);
+  const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [health, setHealth] = useState<string>("检测中");
   const [message, setMessage] = useState("");
 
@@ -17,6 +18,8 @@ export function AdminPage() {
   const queued = queueItems.filter((item) => item.document_status === "queued").length;
   const processing = queueItems.filter((item) => item.document_status === "processing").length;
   const failed = queueItems.filter((item) => item.document_status === "failed").length;
+  const selectedJobs = queueItems.filter((item) => item.job_id && selectedJobIds.includes(item.job_id));
+  const canCancelSelected = selectedJobs.length > 0 && selectedJobs.every((item) => item.document_status === "queued" && item.job_id);
 
   async function load() {
     fetchHealth()
@@ -26,6 +29,7 @@ export function AdminPage() {
       .then((data) => {
         setQueueItems(data.items);
         setQueueTotal(data.total);
+        setSelectedJobIds((current) => current.filter((id) => data.items.some((item) => item.job_id === id)));
       })
       .catch(() => {
         setQueueItems([]);
@@ -45,6 +49,30 @@ export function AdminPage() {
       window.setTimeout(load, 1000);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "提交解析任务失败。");
+    }
+  }
+
+  function toggleQueueSelection(item: ParseQueueItem, checked: boolean) {
+    if (!item.job_id || item.document_status !== "queued") return;
+    setSelectedJobIds((current) => {
+      if (checked) return [...new Set([...current, item.job_id as string])];
+      return current.filter((id) => id !== item.job_id);
+    });
+  }
+
+  async function cancelSelectedJobs() {
+    if (!canCancelSelected) return;
+    if (!window.confirm(`确认把 ${selectedJobs.length} 个文件从解析队列中移除，并退回未解析状态？`)) return;
+    setMessage("正在删除队列任务...");
+    try {
+      for (const item of selectedJobs) {
+        if (item.job_id) await cancelParseJob(item.job_id);
+      }
+      setMessage(`已从队列移除 ${selectedJobs.length} 个文件，状态已退回未解析。`);
+      setSelectedJobIds([]);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "删除队列任务失败。");
     }
   }
 
@@ -128,12 +156,18 @@ export function AdminPage() {
             <h3>解析队列</h3>
             <p>展示所有尚未解析完成的文件；解析成功后会自动从这里移除。</p>
           </div>
-          <button className="secondaryButton" onClick={load}>刷新队列</button>
+          <div className="queueActions">
+            <button className="secondaryButton dangerText" onClick={cancelSelectedJobs} disabled={!canCancelSelected}>
+              删除选中队列任务
+            </button>
+            <button className="secondaryButton" onClick={load}>刷新队列</button>
+          </div>
         </div>
         <div className="tableWrap">
           <table>
             <thead>
               <tr>
+                <th>选择</th>
                 <th>文件</th>
                 <th>类型</th>
                 <th>状态</th>
@@ -145,6 +179,15 @@ export function AdminPage() {
             <tbody>
               {queueItems.map((item) => (
                 <tr key={item.document_id}>
+                  <td>
+                    <input
+                      className="queueCheckbox"
+                      type="checkbox"
+                      checked={!!item.job_id && selectedJobIds.includes(item.job_id)}
+                      disabled={!item.job_id || item.document_status !== "queued"}
+                      onChange={(event) => toggleQueueSelection(item, event.target.checked)}
+                    />
+                  </td>
                   <td>
                     <div className="docTitle">{item.title}</div>
                     <div className="docMeta">{item.original_filename}</div>
@@ -161,7 +204,7 @@ export function AdminPage() {
               ))}
               {!queueItems.length && (
                 <tr>
-                  <td colSpan={6}>当前没有待解析、队列中、解析中或失败的文件。</td>
+                  <td colSpan={7}>当前没有待解析、队列中、解析中或失败的文件。</td>
                 </tr>
               )}
             </tbody>

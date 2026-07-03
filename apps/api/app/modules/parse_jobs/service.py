@@ -139,7 +139,7 @@ def list_parse_queue(limit: int = 200, offset: int = 0) -> dict:
             LEFT JOIN parse_jobs j ON j.id = (
                 SELECT id
                 FROM parse_jobs
-                WHERE document_id = d.id
+                WHERE document_id = d.id AND status IN ('queued', 'processing', 'failed')
                 ORDER BY created_at DESC
                 LIMIT 1
             )
@@ -239,6 +239,31 @@ def claim_next_jobs(limit: int, worker: str | None, request: Request) -> list[di
             }
         )
     return claimed
+
+
+def cancel_queued_parse_job(job_id: str) -> dict:
+    with db_session() as conn:
+        job = conn.execute("SELECT * FROM parse_jobs WHERE id = ?", (job_id,)).fetchone()
+        if not job:
+            raise HTTPException(status_code=404, detail="解析任务不存在。")
+        if job["status"] != "queued":
+            raise HTTPException(status_code=400, detail="只能删除队列中状态的解析任务。")
+
+        now = utc_now()
+        conn.execute(
+            """
+            UPDATE documents
+            SET status = 'uploaded', updated_at = ?
+            WHERE id = ? AND status = 'queued'
+            """,
+            (now, job["document_id"]),
+        )
+        conn.execute("DELETE FROM parse_jobs WHERE id = ?", (job_id,))
+
+    summary = job_to_summary(job)
+    summary["status"] = "canceled"
+    summary["updated_at"] = utc_now()
+    return summary
 
 
 def complete_parse_job(job_id: str, markdown: str, text: str | None, metadata: dict | None, worker: str | None) -> dict:

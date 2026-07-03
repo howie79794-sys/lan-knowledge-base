@@ -986,6 +986,13 @@ pre {
   margin-bottom: 12px;
 }
 
+.queueActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .queuePanelHeader p {
   color: #64748b;
   font-size: 13px;
@@ -1003,6 +1010,13 @@ pre {
   color: #64748b;
   font-size: 12px;
   padding-top: 10px;
+}
+
+.queueCheckbox {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 4px;
 }
 
 .processPanel {

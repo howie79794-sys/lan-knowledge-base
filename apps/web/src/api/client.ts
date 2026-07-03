@@ -166,6 +166,10 @@ export async function fetchParseQueue() {
   return request<{ total: number; items: ParseQueueItem[] }>("/api/v1/parse-jobs/queue?limit=500");
 }
 
+export async function cancelParseJob(jobId: string) {
+  return request<{ id: string; document_id: string; status: string }>(`/api/v1/parse-jobs/${jobId}`, { method: "DELETE" });
+}
+
 export async function deleteDocument(id: string) {
   return request<{ id: string; status: string }>(`/api/v1/documents/${id}`, { method: "DELETE" });
 }
