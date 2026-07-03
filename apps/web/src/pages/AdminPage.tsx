@@ -7,6 +7,7 @@ export function AdminPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [health, setHealth] = useState<string>("检测中");
   const [unprocessed, setUnprocessed] = useState(0);
+  const [queued, setQueued] = useState(0);
   const [message, setMessage] = useState("");
 
   async function load() {
@@ -15,6 +16,7 @@ export function AdminPage() {
       .catch(() => setHealth("异常"));
     fetchAuditLogs().then((data) => setLogs(data.logs)).catch(() => setLogs([]));
     fetchDocuments({ status: "uploaded" }).then((data) => setUnprocessed(data.total)).catch(() => setUnprocessed(0));
+    fetchDocuments({ status: "queued" }).then((data) => setQueued(data.total)).catch(() => setQueued(0));
   }
 
   useEffect(() => {
@@ -22,10 +24,10 @@ export function AdminPage() {
   }, []);
 
   async function runProcessing() {
-    setMessage("正在提交解析任务...");
+    setMessage("正在创建解析任务...");
     try {
       const result = await processUnprocessed();
-      setMessage(`已提交 ${result.queued} 个未解析文件。解析产物会写入 processed 目录。`);
+      setMessage(`已创建 ${result.queued} 个解析任务。Qoder Work 可通过 /api/v1/parse-jobs/next 领取任务。`);
       window.setTimeout(load, 1000);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "提交解析任务失败。");
@@ -62,12 +64,24 @@ export function AdminPage() {
           <strong>{unprocessed}</strong>
         </div>
       </div>
+      <div className="adminGrid compactAdminGrid">
+        <div className="adminTile">
+          <Database size={22} />
+          <span>待 Qoder 领取</span>
+          <strong>{queued}</strong>
+        </div>
+        <div className="adminTile">
+          <Network size={22} />
+          <span>任务领取 API</span>
+          <strong>/api/v1/parse-jobs/next</strong>
+        </div>
+      </div>
       <div className="processPanel">
         <div>
-          <h3>手动解析</h3>
-          <p>只处理还没有解析过的文件。解析后的 Markdown/Text 会独立存放在 processed 目录，供 Agent 后续读取。</p>
+          <h3>创建解析任务</h3>
+          <p>只把未解析文件加入任务队列，不在网站进程里解析。Qoder Work 领取任务后生成 Markdown/Text 并回写 processed 目录。</p>
         </div>
-        <button className="primaryButton" onClick={runProcessing}>解析未解析文件</button>
+        <button className="primaryButton" onClick={runProcessing}>创建未解析文件任务</button>
       </div>
       {message && <div className="notice">{message}</div>}
       <div className="auditPanel">

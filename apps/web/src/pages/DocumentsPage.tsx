@@ -46,6 +46,7 @@ export function DocumentsPage({
       pageTotal: documents.length,
       ready: documents.filter((doc) => doc.status === "ready").length,
       unprocessed: documents.filter((doc) => doc.status === "uploaded").length,
+      queued: documents.filter((doc) => doc.status === "queued").length,
       failed: documents.filter((doc) => doc.status === "failed").length
     };
   }, [documents, totalDocuments]);
@@ -147,8 +148,8 @@ export function DocumentsPage({
   }
 
   async function handleReprocess(id: string) {
-    await reprocessDocument(id);
-    setMessage("已重新加入解析队列。");
+    const result = await reprocessDocument(id);
+    setMessage(`已创建解析任务 ${result.job_id}，等待 Qoder Work 领取。`);
     loadDocuments(id);
   }
 
@@ -176,8 +177,8 @@ export function DocumentsPage({
         <div className="metricStrip">
           <span>总数 {stats.total}</span>
           <span>本页 {stats.pageTotal}</span>
-          <span>可读 {stats.ready}</span>
           <span>未解析 {stats.unprocessed}</span>
+          <span>队列中 {stats.queued}</span>
         </div>
       </div>
 
@@ -321,7 +322,7 @@ export function DocumentsPage({
                   </button>
                   <button className="secondaryButton" onClick={() => handleReprocess(detail.id)}>
                     <RefreshCcw size={16} />
-                    重新解析
+                    创建解析任务
                   </button>
                   <button className="secondaryButton dangerText" onClick={() => handleDelete(detail.id)}>
                     <Trash2 size={16} />
@@ -331,7 +332,7 @@ export function DocumentsPage({
                 {detail.error_message && <div className="errorBox">{detail.error_message}</div>}
                 <div className="contentPreview">
                   <div className="previewTitle">解析内容预览</div>
-                  <pre>{content || "还没有解析。你可以在后台管理页统一解析所有未解析文件。"}</pre>
+                  <pre>{content || "还没有解析。你可以在后台管理页创建解析任务，再由 Qoder Work 领取并回写结果。"}</pre>
                 </div>
               </>
             ) : (

@@ -6,7 +6,7 @@ export type DocumentSummary = {
   file_ext: string;
   folder_path: string;
   size_bytes: number;
-  status: "uploaded" | "processing" | "ready" | "failed" | "deleted";
+  status: "uploaded" | "queued" | "processing" | "ready" | "failed" | "deleted";
   purpose: string;
   uploader_name?: string | null;
   confidentiality: string;
@@ -123,11 +123,25 @@ export async function uploadDocument(formData: FormData) {
 }
 
 export async function reprocessDocument(id: string) {
-  return request<{ id: string; status: string }>(`/api/v1/documents/${id}/reprocess`, { method: "POST" });
+  return request<{ id: string; status: string; job_id: string }>(`/api/v1/documents/${id}/reprocess`, { method: "POST" });
 }
 
 export async function processUnprocessed() {
-  return request<{ queued: number; document_ids: string[] }>("/api/v1/processing/run-unprocessed", { method: "POST" });
+  return request<{ queued: number; document_ids: string[]; job_ids: string[] }>("/api/v1/processing/run-unprocessed", { method: "POST" });
+}
+
+export async function createParseJobsBatch(payload: {
+  document_ids?: string[];
+  purpose?: string;
+  limit?: number;
+  include_failed?: boolean;
+  requested_by?: string;
+}) {
+  return request<{ queued: number; document_ids: string[]; job_ids: string[] }>("/api/v1/parse-jobs/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
 }
 
 export async function deleteDocument(id: string) {

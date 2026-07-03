@@ -84,6 +84,21 @@ def init_db() -> None:
                 FOREIGN KEY(document_id) REFERENCES documents(id)
             );
 
+            CREATE TABLE IF NOT EXISTS parse_jobs (
+                id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                worker TEXT,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                requested_by TEXT,
+                error_message TEXT,
+                created_at TEXT NOT NULL,
+                started_at TEXT,
+                finished_at TEXT,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(document_id) REFERENCES documents(id)
+            );
+
             CREATE TABLE IF NOT EXISTS audit_logs (
                 id TEXT PRIMARY KEY,
                 actor TEXT,
@@ -97,6 +112,8 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
             CREATE INDEX IF NOT EXISTS idx_documents_format ON documents(file_format);
             CREATE INDEX IF NOT EXISTS idx_metadata_purpose ON document_metadata(purpose);
+            CREATE INDEX IF NOT EXISTS idx_parse_jobs_status ON parse_jobs(status);
+            CREATE INDEX IF NOT EXISTS idx_parse_jobs_document ON parse_jobs(document_id);
             CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
             """
         )

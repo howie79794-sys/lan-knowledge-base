@@ -6,6 +6,7 @@ from app.core.paths import ensure_data_dirs
 from app.db.session import init_db
 from app.modules.agent.router import router as agent_router
 from app.modules.documents.router import router as documents_router
+from app.modules.parse_jobs.router import router as parse_jobs_router
 
 
 def create_app() -> FastAPI:
@@ -24,6 +25,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(documents_router)
+    app.include_router(parse_jobs_router)
     app.include_router(agent_router)
 
     @app.get("/api/v1/health", tags=["system"])

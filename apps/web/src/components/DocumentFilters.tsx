@@ -52,6 +52,7 @@ export function DocumentFilters({
       <select value={filters.status} onChange={(event) => onChange({ ...filters, status: event.target.value })}>
         <option value="">全部状态</option>
         <option value="uploaded">未解析</option>
+        <option value="queued">队列中</option>
         <option value="ready">可读取</option>
         <option value="processing">解析中</option>
         <option value="failed">解析失败</option>

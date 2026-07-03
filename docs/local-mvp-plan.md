@@ -11,7 +11,7 @@
 - 两类核心分类：
   - 文件作用：招投标需求清单、规划材料、政策法规、产品社区文档、业务知识、客户或特性案例、业务材料、其他。
   - 文件格式：由系统根据扩展名自动识别。
-- PDF、Word、PPT、Excel 的基础文本抽取，但由管理员手动批量触发，不在上传时自动执行。
+- PDF、Word、PPT、Excel 不在上传时自动解析；管理员手动创建解析任务，由 Qoder Work 主动领取任务并回写解析结果。
 - 为 Agent 提供只读 API：manifest、列表筛选、正文读取、原文下载、OpenAPI；Agent 默认读取 processed 目录中的解析产物。
 - 操作日志：上传、下载、删除、重建索引。
 - 每日备份数据库和文件目录。
@@ -34,7 +34,7 @@
 | 数据库 | SQLite | 3 到 5GB 文件规模下，元数据量小，SQLite 足够起步。 |
 | ORM/迁移 | SQLModel 或 SQLAlchemy + Alembic | 建议用 Alembic 保留后续迁移能力。 |
 | 文件存储 | 本地目录 | 原文件和衍生文件分开存放。 |
-| 文档解析 | MarkItDown + pymupdf/pdfplumber + openpyxl + python-pptx | 先覆盖基础文本抽取，失败时保留错误状态。 |
+| 文档解析 | Qoder Work 任务工人 + 可选本地解析工具 | 网站负责任务队列和结果回写；Qoder Work 负责实际解析，避免上传时消耗台式机性能和 Token。 |
 | 反向代理 | Caddy 或 Nginx | 监听 80 端口，转发前端与 API。 |
 | 进程管理 | Docker Compose 优先；非 Docker 可用 systemd/launchd | 便于在台式机上稳定启动和重启。 |
 
@@ -80,6 +80,10 @@ lan-knowledge-base/
             service.py
             parsers.py
             cleaners.py
+          parse_jobs/
+            router.py
+            schemas.py
+            service.py
           agent/
             router.py
             schemas.py
@@ -112,6 +116,28 @@ lan-knowledge-base/
     backups/
     kb.sqlite3
 ```
+
+## 解析任务流
+
+原始文件和解析知识分离：
+
+```text
+上传原始文件 -> documents.status = uploaded
+后台创建解析任务 -> parse_jobs.status = queued, documents.status = queued
+Qoder Work 领取任务 -> parse_jobs.status = processing, documents.status = processing
+Qoder Work 回写结果 -> content.md/content.txt 写入 processed, documents.status = ready
+Qoder Work 回写失败 -> documents.status = failed
+```
+
+Qoder Work 使用的核心 API：
+
+```text
+GET  /api/v1/parse-jobs/next?limit=5
+POST /api/v1/parse-jobs/{job_id}/complete
+POST /api/v1/parse-jobs/{job_id}/fail
+```
+
+这些接口通过 `KB_AGENT_READ_TOKEN` 保护。网站后台只创建任务，不直接消耗 Token 做解析。
 
 实际开发时，`data/` 不进 Git，只保留 `.gitkeep` 或在初始化脚本中创建。
 

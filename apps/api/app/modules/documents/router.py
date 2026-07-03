@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, Request, UploadFile
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from app.core.config import ALLOWED_EXTENSIONS, DOCUMENT_PURPOSES
@@ -16,9 +16,8 @@ from app.modules.documents.service import (
     list_documents,
     raw_file_path,
     soft_delete_document,
-    unprocessed_document_ids,
 )
-from app.workers.conversion_worker import process_document
+from app.modules.parse_jobs.service import create_batch_parse_jobs, create_parse_job
 
 
 router = APIRouter(prefix="/api/v1", tags=["documents"])
@@ -103,20 +102,17 @@ def document_content(document_id: str, format: str = "markdown"):
 
 
 @router.post("/documents/{document_id}/reprocess")
-def reprocess_document(document_id: str, background_tasks: BackgroundTasks):
-    get_document(document_id)
-    background_tasks.add_task(process_document, document_id)
-    write_audit("reprocess", document_id=document_id)
-    return {"id": document_id, "status": "queued"}
+def reprocess_document(document_id: str, request: Request):
+    job = create_parse_job(document_id, requested_by="web")
+    write_audit("create_parse_job", document_id=document_id, ip=request.client.host if request.client else None, message=job["id"])
+    return {"id": document_id, "status": "queued", "job_id": job["id"]}
 
 
 @router.post("/processing/run-unprocessed")
-def process_unprocessed(background_tasks: BackgroundTasks, request: Request):
-    ids = unprocessed_document_ids()
-    for document_id in ids:
-        background_tasks.add_task(process_document, document_id)
-    write_audit("process_unprocessed", ip=request.client.host if request.client else None, message=f"queued={len(ids)}")
-    return {"queued": len(ids), "document_ids": ids}
+def process_unprocessed(request: Request):
+    result = create_batch_parse_jobs(document_ids=None, purpose=None, limit=100, include_failed=False, requested_by="web")
+    write_audit("create_parse_jobs_batch", ip=request.client.host if request.client else None, message=f"queued={result['queued']}")
+    return {"queued": result["queued"], "document_ids": result["document_ids"], "job_ids": result["job_ids"]}
 
 
 @router.delete("/documents/{document_id}")

@@ -3,6 +3,7 @@ import type { DocumentSummary } from "../api/client";
 
 const statusText: Record<DocumentSummary["status"], string> = {
   uploaded: "未解析",
+  queued: "队列中",
   processing: "解析中",
   ready: "可读取",
   failed: "解析失败",
