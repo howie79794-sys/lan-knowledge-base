@@ -39,3 +39,13 @@ class FolderResponse(BaseModel):
     parent: str | None
     folders: list[FolderEntry]
     documents: list[DocumentSummary]
+
+
+class CreateFolderRequest(BaseModel):
+    purpose: str
+    parent_path: str = "/"
+    name: str
+
+
+class MoveDocumentRequest(BaseModel):
+    folder_path: str

@@ -279,7 +279,6 @@ h3 {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
   overflow-x: auto;
 }
 
@@ -415,12 +414,40 @@ input {
   border-bottom: 0;
 }
 
+.folderBrowser {
+  background: #ffffff;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.folderBrowserTop {
+  min-height: 56px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e1e8ef;
+}
+
+.newFolderControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.newFolderControls input {
+  width: 180px;
+}
+
 .folderGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 10px;
   padding: 12px;
-  border-bottom: 1px solid #e1e8ef;
 }
 
 .folderCard {
@@ -445,6 +472,21 @@ input {
 .folderCard svg {
   color: #1f8f6b;
   flex: 0 0 auto;
+}
+
+.folderCard span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folderEmpty {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  color: #64748b;
+  font-size: 13px;
 }
 
 .knowledgeToolbar {
@@ -1142,6 +1184,18 @@ pre {
 
   .formGrid {
     grid-template-columns: 1fr;
+  }
+
+  .folderBrowserTop,
+  .newFolderControls {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .newFolderControls input,
+  .newFolderControls .secondaryButton {
+    width: 100%;
   }
 
   .navParent,

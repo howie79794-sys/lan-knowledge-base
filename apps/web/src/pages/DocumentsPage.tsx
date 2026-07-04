@@ -1,7 +1,18 @@
-import { ChevronLeft, ChevronRight, Copy, Download, RefreshCcw, Trash2, UploadCloud } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Download, Folder, FolderPlus, MoveRight, RefreshCcw, Trash2, UploadCloud } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { Categories, DocumentDetail, DocumentSummary } from "../api/client";
-import { deleteDocument, fetchContent, fetchDocument, fetchDocuments, rawUrl, reprocessDocument, uploadDocument } from "../api/client";
+import type { Categories, DocumentDetail, DocumentSummary, FolderResponse } from "../api/client";
+import {
+  createFolder,
+  deleteDocument,
+  fetchContent,
+  fetchDocument,
+  fetchDocuments,
+  fetchFolder,
+  moveDocument,
+  rawUrl,
+  reprocessDocument,
+  uploadDocument
+} from "../api/client";
 import { DocumentFilters, type Filters } from "../components/DocumentFilters";
 import { DocumentTable } from "../components/DocumentTable";
 import { StatusBadge } from "../components/StatusBadge";
@@ -30,9 +41,12 @@ export function DocumentsPage({
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [currentFolder, setCurrentFolder] = useState(`/${purpose}`);
+  const [folderInfo, setFolderInfo] = useState<FolderResponse | null>(null);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
   const [files, setFiles] = useState<File[]>([]);
-  const [folderPath, setFolderPath] = useState(`/${purpose}`);
   const [title, setTitle] = useState("");
   const [uploader, setUploader] = useState("");
   const [project, setProject] = useState("");
@@ -63,6 +77,7 @@ export function DocumentsPage({
         format: filters.format,
         status: filters.status,
         q: filters.q,
+        folder: currentFolder,
         limit: pageSize,
         offset: (page - 1) * pageSize
       });
@@ -78,22 +93,39 @@ export function DocumentsPage({
     }
   }
 
+  async function loadFolder() {
+    const data = await fetchFolder(currentFolder, purpose);
+    setFolderInfo(data);
+    if (data.path !== currentFolder) setCurrentFolder(data.path);
+  }
+
   useEffect(() => {
     setSelectedId(null);
     setDetail(null);
     setContent("");
-    setFolderPath(`/${purpose}`);
+    setCurrentFolder(`/${purpose}`);
+    setFolderInfo(null);
+    setNewFolderName("");
     setMessage("");
     setPage(1);
   }, [purpose]);
 
   useEffect(() => {
     loadDocuments();
-  }, [filters, refreshKey, purpose, page, pageSize]);
+  }, [filters, refreshKey, purpose, page, pageSize, currentFolder]);
+
+  useEffect(() => {
+    loadFolder().catch((error) => setMessage(error instanceof Error ? error.message : "读取文件夹失败。"));
+  }, [purpose, currentFolder, refreshKey]);
 
   useEffect(() => {
     setPage(1);
   }, [filters.format, filters.status, filters.q, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+    setSelectedId(null);
+  }, [currentFolder]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -126,7 +158,7 @@ export function DocumentsPage({
         const body = new FormData();
         body.set("file", selectedFile);
         body.set("purpose", purpose);
-        body.set("folder_path", folderPath || `/${purpose}`);
+        body.set("folder_path", currentFolder);
         body.set("title", files.length === 1 ? title : "");
         body.set("uploader_name", uploader);
         body.set("project", project);
@@ -139,6 +171,7 @@ export function DocumentsPage({
       setTitle("");
       setMessage(`已上传 ${uploadedIds.length} 个文件到「${purpose}」，当前状态为未解析。`);
       onUploaded();
+      await loadFolder();
       await loadDocuments(uploadedIds[uploadedIds.length - 1]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "上传失败。");
@@ -157,7 +190,45 @@ export function DocumentsPage({
     if (!window.confirm("确认删除这条原始文件记录？")) return;
     await deleteDocument(id);
     setSelectedId(null);
+    await loadFolder();
     loadDocuments();
+  }
+
+  async function handleCreateFolder() {
+    if (!newFolderName.trim()) {
+      setMessage("请输入文件夹名称。");
+      return;
+    }
+    setCreatingFolder(true);
+    setMessage("");
+    try {
+      const folder = await createFolder({ purpose, parent_path: currentFolder, name: newFolderName });
+      setNewFolderName("");
+      setMessage(`已创建文件夹：${folder.path}`);
+      await loadFolder();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "创建文件夹失败。");
+    } finally {
+      setCreatingFolder(false);
+    }
+  }
+
+  async function handleMoveToCurrentFolder() {
+    if (!detail || detail.folder_path === currentFolder) return;
+    if (!window.confirm(`确认把「${detail.title}」移动到 ${currentFolder}？知识管理中的路径也会同步变化。`)) return;
+    try {
+      const moved = await moveDocument(detail.id, currentFolder);
+      setDetail(moved);
+      setMessage("已移动文件，知识管理中的路径会同步保持一致。");
+      await loadFolder();
+      await loadDocuments(moved.id);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "移动文件失败。");
+    }
+  }
+
+  function enterFolder(path: string) {
+    setCurrentFolder(path);
   }
 
   function copyAgentLink() {
@@ -184,6 +255,18 @@ export function DocumentsPage({
 
       <DocumentFilters categories={categories} filters={filters} onChange={setFilters} onRefresh={() => loadDocuments()} mode="file-manager" />
       {message && <div className="notice">{message}</div>}
+
+      <FolderNavigator
+        currentFolder={currentFolder}
+        purpose={purpose}
+        folders={folderInfo?.folders ?? []}
+        onEnter={enterFolder}
+        onCreate={handleCreateFolder}
+        newFolderName={newFolderName}
+        onNewFolderNameChange={setNewFolderName}
+        creating={creatingFolder}
+        writable
+      />
 
       <div className="documentLayout">
         <div className="listPane">
@@ -246,8 +329,8 @@ export function DocumentsPage({
             </label>
             <div className="compactForm">
               <label>
-                文件夹路径
-                <input value={folderPath} onChange={(event) => setFolderPath(event.target.value)} placeholder={`/${purpose}/2026`} />
+                当前上传位置
+                <input value={currentFolder} readOnly />
               </label>
               <label>
                 标题
@@ -324,6 +407,10 @@ export function DocumentsPage({
                     <RefreshCcw size={16} />
                     创建解析任务
                   </button>
+                  <button className="secondaryButton" onClick={handleMoveToCurrentFolder} disabled={detail.folder_path === currentFolder}>
+                    <MoveRight size={16} />
+                    移动到当前文件夹
+                  </button>
                   <button className="secondaryButton dangerText" onClick={() => handleDelete(detail.id)}>
                     <Trash2 size={16} />
                     删除记录
@@ -343,6 +430,85 @@ export function DocumentsPage({
       </div>
     </section>
   );
+}
+
+export function FolderNavigator({
+  currentFolder,
+  purpose,
+  folders,
+  onEnter,
+  onCreate,
+  newFolderName,
+  onNewFolderNameChange,
+  creating,
+  writable
+}: {
+  currentFolder: string;
+  purpose: string;
+  folders: { name: string; path: string }[];
+  onEnter: (path: string) => void;
+  onCreate?: () => void;
+  newFolderName?: string;
+  onNewFolderNameChange?: (value: string) => void;
+  creating?: boolean;
+  writable?: boolean;
+}) {
+  const crumbs = buildBreadcrumbs(currentFolder, purpose);
+  return (
+    <div className="folderBrowser">
+      <div className="folderBrowserTop">
+        <div className="pathBar">
+          {crumbs.map((crumb, index) => (
+            <button
+              key={crumb.path}
+              className={index === crumbs.length - 1 ? "breadcrumb active" : "breadcrumb"}
+              onClick={() => onEnter(crumb.path)}
+            >
+              {crumb.name}
+            </button>
+          ))}
+        </div>
+        {writable && (
+          <div className="newFolderControls">
+            <input
+              value={newFolderName ?? ""}
+              onChange={(event) => onNewFolderNameChange?.(event.target.value)}
+              placeholder="新建文件夹名称"
+              onKeyDown={(event) => {
+                if (event.key === "Enter") onCreate?.();
+              }}
+            />
+            <button className="secondaryButton" onClick={onCreate} disabled={creating}>
+              <FolderPlus size={16} />
+              {creating ? "创建中" : "新建文件夹"}
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="folderGrid">
+        {folders.map((folder) => (
+          <button key={folder.path} className="folderCard" onClick={() => onEnter(folder.path)}>
+            <Folder size={19} />
+            <span>{folder.name}</span>
+          </button>
+        ))}
+        {!folders.length && <div className="folderEmpty">当前层级还没有下级文件夹。</div>}
+      </div>
+    </div>
+  );
+}
+
+function buildBreadcrumbs(currentFolder: string, purpose: string) {
+  const root = `/${purpose}`;
+  const normalized = currentFolder.startsWith(root) ? currentFolder : root;
+  const relativeParts = normalized.slice(root.length).split("/").filter(Boolean);
+  const crumbs = [{ name: purpose, path: root }];
+  let path = root;
+  relativeParts.forEach((part) => {
+    path = `${path}/${part}`;
+    crumbs.push({ name: part, path });
+  });
+  return crumbs;
 }
 
 function selectedFileLabel(files: File[]) {

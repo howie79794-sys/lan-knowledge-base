@@ -45,6 +45,59 @@ def normalize_folder_path(folder_path: str | None) -> str:
     return "/" + "/".join(parts)
 
 
+def normalize_purpose(purpose: str) -> str:
+    display = display_purpose(purpose)
+    if display not in DOCUMENT_PURPOSES:
+        raise HTTPException(status_code=400, detail="文件作用分类不在允许范围内。")
+    return display
+
+
+def ensure_purpose_folder_path(purpose: str, folder_path: str | None) -> str:
+    canonical_purpose = normalize_purpose(purpose)
+    normalized = normalize_folder_path(folder_path)
+    root = f"/{canonical_purpose}"
+    if normalized == "/":
+        return root
+    root_prefix = f"{root}/"
+    if normalized == root or normalized.startswith(root_prefix):
+        return normalized
+    relative = normalized.strip("/")
+    return f"{root}/{relative}" if relative else root
+
+
+def insert_folder_paths(conn, purpose: str, folder_path: str) -> None:
+    canonical_purpose = normalize_purpose(purpose)
+    normalized = ensure_purpose_folder_path(canonical_purpose, folder_path)
+    now = utc_now()
+    parts = normalized.strip("/").split("/")
+    for index in range(1, len(parts) + 1):
+        path = "/" + "/".join(parts[:index])
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO document_folders (id, purpose, path, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (f"fld_{uuid4().hex}", canonical_purpose, path, now),
+        )
+
+
+def create_folder(purpose: str, parent_path: str | None, name: str) -> dict:
+    canonical_purpose = normalize_purpose(purpose)
+    clean_name = name.strip().replace("\\", "/").strip("/")
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="文件夹名称不能为空。")
+    if "/" in clean_name or clean_name in {".", ".."}:
+        raise HTTPException(status_code=400, detail="文件夹名称不能包含 /、. 或 ..。")
+    if len(clean_name) > 80:
+        raise HTTPException(status_code=400, detail="文件夹名称不能超过 80 个字符。")
+
+    parent = ensure_purpose_folder_path(canonical_purpose, parent_path)
+    path = normalize_folder_path(f"{parent}/{clean_name}")
+    with db_session() as conn:
+        insert_folder_paths(conn, canonical_purpose, path)
+    return {"name": clean_name, "path": path}
+
+
 def purpose_filter_values(purpose: str) -> list[str]:
     values = [purpose]
     values.extend(old for old, new in PURPOSE_ALIASES.items() if new == purpose)
@@ -66,7 +119,8 @@ def create_document(
     folder_path: str | None,
 ) -> str:
     filename, ext, file_format = normalize_upload(file, purpose)
-    normalized_folder = normalize_folder_path(folder_path)
+    canonical_purpose = normalize_purpose(purpose)
+    normalized_folder = ensure_purpose_folder_path(canonical_purpose, folder_path)
     document_id = f"doc_{uuid4().hex}"
     now = utc_now()
     date_dir = datetime.now().strftime("%Y/%m")
@@ -92,6 +146,7 @@ def create_document(
     checksum = checksum_file(target_path)
     display_title = (title or Path(filename).stem).strip()
     with db_session() as conn:
+        insert_folder_paths(conn, canonical_purpose, normalized_folder)
         conn.execute(
             """
             INSERT INTO documents (
@@ -122,7 +177,7 @@ def create_document(
             )
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (document_id, purpose, source, project, confidentiality or "internal", uploader_name),
+            (document_id, canonical_purpose, source, project, confidentiality or "internal", uploader_name),
         )
     return document_id
 
@@ -202,22 +257,47 @@ def list_documents(
     return total, [row_to_summary(row) for row in rows]
 
 
-def list_folder(folder_path: str | None) -> dict:
-    current = normalize_folder_path(folder_path)
+def list_folder(folder_path: str | None, purpose: str | None = None) -> dict:
+    current = ensure_purpose_folder_path(purpose, folder_path) if purpose else normalize_folder_path(folder_path)
     prefix = "/" if current == "/" else f"{current}/"
+    canonical_purpose = normalize_purpose(purpose) if purpose else None
     with db_session() as conn:
+        folder_params: list[str] = []
+        folder_filters: list[str] = []
+        if canonical_purpose:
+            folder_filters.append("purpose = ?")
+            folder_params.append(canonical_purpose)
+        folder_where = f"WHERE {' AND '.join(folder_filters)}" if folder_filters else ""
         folder_rows = conn.execute(
-            "SELECT DISTINCT folder_path FROM documents WHERE status != 'deleted' ORDER BY folder_path ASC"
+            f"""
+            SELECT path AS folder_path FROM document_folders
+            {folder_where}
+            UNION
+            SELECT DISTINCT d.folder_path AS folder_path
+            FROM documents d
+            JOIN document_metadata m ON m.document_id = d.id
+            WHERE d.status != 'deleted'
+            {f"AND m.purpose IN ({','.join('?' for _ in purpose_filter_values(canonical_purpose))})" if canonical_purpose else ""}
+            ORDER BY folder_path ASC
+            """,
+            [*folder_params, *(purpose_filter_values(canonical_purpose) if canonical_purpose else [])],
         ).fetchall()
+        doc_params: list[str] = [current]
+        purpose_clause = ""
+        if canonical_purpose:
+            values = purpose_filter_values(canonical_purpose)
+            purpose_clause = f"AND m.purpose IN ({','.join('?' for _ in values)})"
+            doc_params.extend(values)
         doc_rows = conn.execute(
-            """
+            f"""
             SELECT d.*, m.purpose, m.uploader_name, m.confidentiality
             FROM documents d
             JOIN document_metadata m ON m.document_id = d.id
             WHERE d.status != 'deleted' AND d.folder_path = ?
+            {purpose_clause}
             ORDER BY d.updated_at DESC
             """,
-            (current,),
+            doc_params,
         ).fetchall()
 
     child_folders: dict[str, str] = {}
@@ -241,6 +321,20 @@ def list_folder(folder_path: str | None) -> dict:
         "folders": [{"name": name, "path": path} for name, path in sorted(child_folders.items())],
         "documents": [row_to_summary(row) for row in doc_rows],
     }
+
+
+def move_document(document_id: str, folder_path: str) -> dict:
+    doc = get_document(document_id)
+    purpose = normalize_purpose(doc["purpose"])
+    target_path = ensure_purpose_folder_path(purpose, folder_path)
+    now = utc_now()
+    with db_session() as conn:
+        insert_folder_paths(conn, purpose, target_path)
+        conn.execute(
+            "UPDATE documents SET folder_path = ?, updated_at = ? WHERE id = ?",
+            (target_path, now, document_id),
+        )
+    return get_document(document_id)
 
 
 def unprocessed_document_ids() -> list[str]:

@@ -6,14 +6,16 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from app.core.config import ALLOWED_EXTENSIONS, DOCUMENT_PURPOSES
 from app.db.session import db_session
 from app.modules.audit.service import AUDITED_ACTIONS, write_audit
-from app.modules.documents.schemas import CategoryResponse, DocumentListResponse, FolderResponse
+from app.modules.documents.schemas import CategoryResponse, CreateFolderRequest, DocumentListResponse, FolderEntry, FolderResponse, MoveDocumentRequest
 from app.modules.documents.service import (
     content_file_path,
+    create_folder,
     create_document,
     get_document,
     list_knowledge,
     list_folder,
     list_documents,
+    move_document,
     raw_file_path,
     soft_delete_document,
 )
@@ -71,8 +73,19 @@ def documents(
 
 
 @router.get("/folders", response_model=FolderResponse)
-def folder(path: str = "/") -> FolderResponse:
-    return FolderResponse(**list_folder(path))
+def folder(path: str = "/", purpose: str | None = None) -> FolderResponse:
+    return FolderResponse(**list_folder(path, purpose=purpose))
+
+
+@router.post("/folders", response_model=FolderEntry)
+def create_folder_route(payload: CreateFolderRequest, request: Request) -> FolderEntry:
+    folder_entry = create_folder(payload.purpose, payload.parent_path, payload.name)
+    write_audit(
+        "create_folder",
+        ip=request.client.host if request.client else None,
+        message=f"{payload.purpose}:{folder_entry['path']}",
+    )
+    return FolderEntry(**folder_entry)
 
 
 @router.get("/documents/{document_id}")
@@ -105,6 +118,18 @@ def reprocess_document(document_id: str, request: Request):
     job = create_parse_job(document_id, requested_by="web")
     write_audit("create_parse_job", document_id=document_id, ip=request.client.host if request.client else None, message=job["id"])
     return {"id": document_id, "status": "queued", "job_id": job["id"]}
+
+
+@router.patch("/documents/{document_id}/folder")
+def move_document_route(document_id: str, payload: MoveDocumentRequest, request: Request):
+    doc = move_document(document_id, payload.folder_path)
+    write_audit(
+        "move_document",
+        document_id=document_id,
+        ip=request.client.host if request.client else None,
+        message=doc["folder_path"],
+    )
+    return doc
 
 
 @router.post("/processing/run-unprocessed")

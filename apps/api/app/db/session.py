@@ -99,6 +99,14 @@ def init_db() -> None:
                 FOREIGN KEY(document_id) REFERENCES documents(id)
             );
 
+            CREATE TABLE IF NOT EXISTS document_folders (
+                id TEXT PRIMARY KEY,
+                purpose TEXT NOT NULL,
+                path TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(purpose, path)
+            );
+
             CREATE TABLE IF NOT EXISTS audit_logs (
                 id TEXT PRIMARY KEY,
                 actor TEXT,
@@ -114,6 +122,8 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_metadata_purpose ON document_metadata(purpose);
             CREATE INDEX IF NOT EXISTS idx_parse_jobs_status ON parse_jobs(status);
             CREATE INDEX IF NOT EXISTS idx_parse_jobs_document ON parse_jobs(document_id);
+            CREATE INDEX IF NOT EXISTS idx_document_folders_purpose ON document_folders(purpose);
+            CREATE INDEX IF NOT EXISTS idx_document_folders_path ON document_folders(path);
             CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
             """
         )

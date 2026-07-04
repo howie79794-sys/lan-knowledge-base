@@ -99,6 +99,7 @@ export async function fetchDocuments(filters: {
   format?: string;
   q?: string;
   status?: string;
+  folder?: string;
   limit?: number;
   offset?: number;
 }) {
@@ -110,8 +111,18 @@ export async function fetchDocuments(filters: {
   return request<{ total: number; documents: DocumentSummary[] }>(`/api/v1/documents${suffix}`);
 }
 
-export async function fetchFolder(path: string) {
-  return request<FolderResponse>(`/api/v1/folders?path=${encodeURIComponent(path)}`);
+export async function fetchFolder(path: string, purpose?: string) {
+  const params = new URLSearchParams({ path });
+  if (purpose) params.set("purpose", purpose);
+  return request<FolderResponse>(`/api/v1/folders?${params.toString()}`);
+}
+
+export async function createFolder(payload: { purpose: string; parent_path: string; name: string }) {
+  return request<FolderEntry>("/api/v1/folders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
 }
 
 export async function fetchKnowledge(filters: { q?: string; folder?: string; purpose?: string }) {
@@ -142,6 +153,14 @@ export async function uploadDocument(formData: FormData) {
 
 export async function reprocessDocument(id: string) {
   return request<{ id: string; status: string; job_id: string }>(`/api/v1/documents/${id}/reprocess`, { method: "POST" });
+}
+
+export async function moveDocument(id: string, folderPath: string) {
+  return request<DocumentDetail>(`/api/v1/documents/${id}/folder`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folder_path: folderPath })
+  });
 }
 
 export async function processUnprocessed() {

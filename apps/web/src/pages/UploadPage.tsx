@@ -1,12 +1,12 @@
 import { UploadCloud } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Categories } from "../api/client";
 import { uploadDocument } from "../api/client";
 
 export function UploadPage({ categories, onUploaded }: { categories: Categories | null; onUploaded: (id: string) => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [purpose, setPurpose] = useState("业务知识");
-  const [folderPath, setFolderPath] = useState("/");
+  const [folderPath, setFolderPath] = useState("/业务知识");
   const [title, setTitle] = useState("");
   const [uploader, setUploader] = useState("");
   const [project, setProject] = useState("");
@@ -14,6 +14,10 @@ export function UploadPage({ categories, onUploaded }: { categories: Categories 
   const [confidentiality, setConfidentiality] = useState("internal");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (purpose) setFolderPath((current) => (current === "/" || !current ? `/${purpose}` : current));
+  }, [purpose]);
 
   async function submit() {
     if (!file || !purpose) {
@@ -72,7 +76,13 @@ export function UploadPage({ categories, onUploaded }: { categories: Categories 
           </label>
           <label>
             文件作用
-            <select value={purpose} onChange={(event) => setPurpose(event.target.value)}>
+            <select
+              value={purpose}
+              onChange={(event) => {
+                setPurpose(event.target.value);
+                if (event.target.value) setFolderPath(`/${event.target.value}`);
+              }}
+            >
               <option value="">请选择</option>
               {categories?.purposes.map((item) => (
                 <option key={item} value={item}>

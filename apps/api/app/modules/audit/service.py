@@ -11,6 +11,8 @@ AUDITED_ACTIONS = {
     "cancel_parse_job",
     "complete_parse_job",
     "fail_parse_job",
+    "create_folder",
+    "move_document",
 }
 
 MAX_AUDIT_LOGS = 1000

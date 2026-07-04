@@ -1,8 +1,9 @@
 import { Copy, Database, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { DocumentSummary } from "../api/client";
-import { fetchContent, fetchDocument, fetchKnowledge, type DocumentDetail } from "../api/client";
+import type { DocumentSummary, FolderResponse } from "../api/client";
+import { fetchContent, fetchDocument, fetchFolder, fetchKnowledge, type DocumentDetail } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
+import { FolderNavigator } from "./DocumentsPage";
 
 export function KnowledgePage({ purpose }: { purpose: string }) {
   const [q, setQ] = useState("");
@@ -11,6 +12,8 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [content, setContent] = useState("");
   const [message, setMessage] = useState("");
+  const [currentFolder, setCurrentFolder] = useState(`/${purpose}`);
+  const [folderInfo, setFolderInfo] = useState<FolderResponse | null>(null);
 
   const overview = useMemo(() => {
     return {
@@ -21,11 +24,17 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
   }, [items]);
 
   async function load() {
-    const data = await fetchKnowledge({ q, purpose });
+    const data = await fetchKnowledge({ q, purpose, folder: currentFolder });
     setItems(data.documents);
     if (!data.documents.some((item) => item.id === selectedId)) {
       setSelectedId(data.documents[0]?.id ?? null);
     }
+  }
+
+  async function loadFolder() {
+    const data = await fetchFolder(currentFolder, purpose);
+    setFolderInfo(data);
+    if (data.path !== currentFolder) setCurrentFolder(data.path);
   }
 
   useEffect(() => {
@@ -33,11 +42,21 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
     setDetail(null);
     setContent("");
     setMessage("");
+    setCurrentFolder(`/${purpose}`);
+    setFolderInfo(null);
   }, [purpose]);
 
   useEffect(() => {
     load().catch((error) => setMessage(error instanceof Error ? error.message : "读取知识失败。"));
-  }, [q, purpose]);
+  }, [q, purpose, currentFolder]);
+
+  useEffect(() => {
+    loadFolder().catch((error) => setMessage(error instanceof Error ? error.message : "读取文件夹失败。"));
+  }, [purpose, currentFolder]);
+
+  useEffect(() => {
+    setSelectedId(null);
+  }, [currentFolder]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -78,6 +97,13 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
       </div>
 
       {message && <div className="notice">{message}</div>}
+
+      <FolderNavigator
+        currentFolder={currentFolder}
+        purpose={purpose}
+        folders={folderInfo?.folders ?? []}
+        onEnter={setCurrentFolder}
+      />
 
       <div className="knowledgeLayout">
         <div className="knowledgeList">
