@@ -125,6 +125,11 @@ export async function createFolder(payload: { purpose: string; parent_path: stri
   });
 }
 
+export async function deleteFolder(purpose: string, path: string) {
+  const params = new URLSearchParams({ purpose, path });
+  return request<FolderEntry>(`/api/v1/folders?${params.toString()}`, { method: "DELETE" });
+}
+
 export async function fetchKnowledge(filters: { q?: string; folder?: string; purpose?: string }) {
   const params = new URLSearchParams();
   if (filters.q) params.set("q", filters.q);

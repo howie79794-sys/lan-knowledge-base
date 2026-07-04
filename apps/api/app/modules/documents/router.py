@@ -11,6 +11,7 @@ from app.modules.documents.service import (
     content_file_path,
     create_folder,
     create_document,
+    delete_folder,
     get_document,
     list_knowledge,
     list_folder,
@@ -84,6 +85,17 @@ def create_folder_route(payload: CreateFolderRequest, request: Request) -> Folde
         "create_folder",
         ip=request.client.host if request.client else None,
         message=f"{payload.purpose}:{folder_entry['path']}",
+    )
+    return FolderEntry(**folder_entry)
+
+
+@router.delete("/folders", response_model=FolderEntry)
+def delete_folder_route(purpose: str, path: str, request: Request) -> FolderEntry:
+    folder_entry = delete_folder(purpose, path)
+    write_audit(
+        "delete_folder",
+        ip=request.client.host if request.client else None,
+        message=f"{purpose}:{folder_entry['path']}",
     )
     return FolderEntry(**folder_entry)
 

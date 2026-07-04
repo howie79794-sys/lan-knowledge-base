@@ -12,6 +12,7 @@ AUDITED_ACTIONS = {
     "complete_parse_job",
     "fail_parse_job",
     "create_folder",
+    "delete_folder",
     "move_document",
 }
 

@@ -61,6 +61,9 @@ def ensure_purpose_folder_path(purpose: str, folder_path: str | None) -> str:
     root_prefix = f"{root}/"
     if normalized == root or normalized.startswith(root_prefix):
         return normalized
+    first_part = normalized.strip("/").split("/", 1)[0]
+    if first_part in DOCUMENT_PURPOSES:
+        return root
     relative = normalized.strip("/")
     return f"{root}/{relative}" if relative else root
 
@@ -96,6 +99,53 @@ def create_folder(purpose: str, parent_path: str | None, name: str) -> dict:
     with db_session() as conn:
         insert_folder_paths(conn, canonical_purpose, path)
     return {"name": clean_name, "path": path}
+
+
+def delete_folder(purpose: str, folder_path: str) -> dict:
+    canonical_purpose = normalize_purpose(purpose)
+    path = ensure_purpose_folder_path(canonical_purpose, folder_path)
+    root = f"/{canonical_purpose}"
+    if path == root:
+        raise HTTPException(status_code=400, detail="不能删除左侧固定二级目录。")
+    prefix = f"{path}/"
+    with db_session() as conn:
+        folder = conn.execute(
+            "SELECT * FROM document_folders WHERE purpose = ? AND path = ?",
+            (canonical_purpose, path),
+        ).fetchone()
+        if not folder:
+            raise HTTPException(status_code=404, detail="文件夹不存在，或不是自定义文件夹。")
+
+        document_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM documents d
+            JOIN document_metadata m ON m.document_id = d.id
+            WHERE d.status != 'deleted'
+              AND m.purpose IN ({})
+              AND (d.folder_path = ? OR d.folder_path LIKE ?)
+            """.format(",".join("?" for _ in purpose_filter_values(canonical_purpose))),
+            [*purpose_filter_values(canonical_purpose), path, f"{prefix}%"],
+        ).fetchone()["count"]
+        if document_count:
+            raise HTTPException(status_code=400, detail="文件夹内还有文件，不能删除。")
+
+        child_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM document_folders
+            WHERE purpose = ? AND path LIKE ?
+            """,
+            (canonical_purpose, f"{prefix}%"),
+        ).fetchone()["count"]
+        if child_count:
+            raise HTTPException(status_code=400, detail="文件夹内还有下级文件夹，不能删除。")
+
+        conn.execute(
+            "DELETE FROM document_folders WHERE purpose = ? AND path = ?",
+            (canonical_purpose, path),
+        )
+    return {"name": path.rsplit("/", 1)[-1], "path": path}
 
 
 def purpose_filter_values(purpose: str) -> list[str]:
@@ -301,12 +351,15 @@ def list_folder(folder_path: str | None, purpose: str | None = None) -> dict:
         ).fetchall()
 
     child_folders: dict[str, str] = {}
+    root_path = f"/{canonical_purpose}" if canonical_purpose else None
     for row in folder_rows:
         path = row["folder_path"]
         if path == current or not path.startswith(prefix):
             continue
         rest = path[len(prefix) :]
         child = rest.split("/", 1)[0]
+        if current == root_path and child in DOCUMENT_PURPOSES and child != canonical_purpose:
+            continue
         child_path = f"/{child}" if current == "/" else f"{current}/{child}"
         child_folders[child] = child_path
 

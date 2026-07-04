@@ -4,6 +4,7 @@ import type { Categories, DocumentDetail, DocumentSummary, FolderResponse } from
 import {
   createFolder,
   deleteDocument,
+  deleteFolder,
   fetchContent,
   fetchDocument,
   fetchDocuments,
@@ -70,6 +71,11 @@ export function DocumentsPage({
   const pageEnd = Math.min(page * pageSize, totalDocuments);
 
   async function loadDocuments(nextSelectedId?: string) {
+    const requestFolder = normalizeFolderForPurpose(currentFolder, purpose);
+    if (requestFolder !== currentFolder) {
+      setCurrentFolder(requestFolder);
+      return;
+    }
     setLoading(true);
     try {
       const data = await fetchDocuments({
@@ -94,9 +100,15 @@ export function DocumentsPage({
   }
 
   async function loadFolder() {
-    const data = await fetchFolder(currentFolder, purpose);
+    const requestFolder = normalizeFolderForPurpose(currentFolder, purpose);
+    if (requestFolder !== currentFolder) {
+      setCurrentFolder(requestFolder);
+      return;
+    }
+    const data = await fetchFolder(requestFolder, purpose);
     setFolderInfo(data);
-    if (data.path !== currentFolder) setCurrentFolder(data.path);
+    const nextPath = normalizeFolderForPurpose(data.path, purpose);
+    if (nextPath !== currentFolder) setCurrentFolder(nextPath);
   }
 
   useEffect(() => {
@@ -213,6 +225,18 @@ export function DocumentsPage({
     }
   }
 
+  async function handleDeleteFolder(path: string) {
+    const folderName = path.split("/").filter(Boolean).pop();
+    if (!window.confirm(`确认删除空文件夹「${folderName || path}」？文件夹内有文件或下级文件夹时不会删除。`)) return;
+    try {
+      const deleted = await deleteFolder(purpose, path);
+      setMessage(`已删除文件夹：${deleted.path}`);
+      await loadFolder();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "删除文件夹失败。");
+    }
+  }
+
   async function handleMoveToCurrentFolder() {
     if (!detail || detail.folder_path === currentFolder) return;
     if (!window.confirm(`确认把「${detail.title}」移动到 ${currentFolder}？知识管理中的路径也会同步变化。`)) return;
@@ -266,6 +290,7 @@ export function DocumentsPage({
         onNewFolderNameChange={setNewFolderName}
         creating={creatingFolder}
         writable
+        onDeleteFolder={handleDeleteFolder}
       />
 
       <div className="documentLayout">
@@ -441,7 +466,8 @@ export function FolderNavigator({
   newFolderName,
   onNewFolderNameChange,
   creating,
-  writable
+  writable,
+  onDeleteFolder
 }: {
   currentFolder: string;
   purpose: string;
@@ -452,21 +478,25 @@ export function FolderNavigator({
   onNewFolderNameChange?: (value: string) => void;
   creating?: boolean;
   writable?: boolean;
+  onDeleteFolder?: (path: string) => void;
 }) {
   const crumbs = buildBreadcrumbs(currentFolder, purpose);
   return (
     <div className="folderBrowser">
       <div className="folderBrowserTop">
-        <div className="pathBar">
-          {crumbs.map((crumb, index) => (
-            <button
-              key={crumb.path}
-              className={index === crumbs.length - 1 ? "breadcrumb active" : "breadcrumb"}
-              onClick={() => onEnter(crumb.path)}
-            >
-              {crumb.name}
-            </button>
-          ))}
+        <div className="pathBlock">
+          <span className="pathLabel">当前路径</span>
+          <div className="pathBar">
+            {crumbs.map((crumb, index) => (
+              <button
+                key={crumb.path}
+                className={index === crumbs.length - 1 ? "breadcrumb active" : "breadcrumb"}
+                onClick={() => onEnter(crumb.path)}
+              >
+                {crumb.name}
+              </button>
+            ))}
+          </div>
         </div>
         {writable && (
           <div className="newFolderControls">
@@ -487,10 +517,17 @@ export function FolderNavigator({
       </div>
       <div className="folderGrid">
         {folders.map((folder) => (
-          <button key={folder.path} className="folderCard" onClick={() => onEnter(folder.path)}>
-            <Folder size={19} />
-            <span>{folder.name}</span>
-          </button>
+          <div key={folder.path} className="folderCard">
+            <button className="folderOpenButton" onClick={() => onEnter(folder.path)}>
+              <Folder size={19} />
+              <span>{folder.name}</span>
+            </button>
+            {writable && onDeleteFolder && (
+              <button className="iconButton danger folderDeleteButton" onClick={() => onDeleteFolder(folder.path)} title="删除空文件夹">
+                <Trash2 size={15} />
+              </button>
+            )}
+          </div>
         ))}
         {!folders.length && <div className="folderEmpty">当前层级还没有下级文件夹。</div>}
       </div>
@@ -500,7 +537,7 @@ export function FolderNavigator({
 
 function buildBreadcrumbs(currentFolder: string, purpose: string) {
   const root = `/${purpose}`;
-  const normalized = currentFolder.startsWith(root) ? currentFolder : root;
+  const normalized = normalizeFolderForPurpose(currentFolder, purpose);
   const relativeParts = normalized.slice(root.length).split("/").filter(Boolean);
   const crumbs = [{ name: purpose, path: root }];
   let path = root;
@@ -509,6 +546,11 @@ function buildBreadcrumbs(currentFolder: string, purpose: string) {
     crumbs.push({ name: part, path });
   });
   return crumbs;
+}
+
+function normalizeFolderForPurpose(folder: string, purpose: string) {
+  const root = `/${purpose}`;
+  return folder === root || folder.startsWith(`${root}/`) ? folder : root;
 }
 
 function selectedFileLabel(files: File[]) {

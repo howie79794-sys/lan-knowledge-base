@@ -24,6 +24,11 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
   }, [items]);
 
   async function load() {
+    const requestFolder = normalizeFolderForPurpose(currentFolder, purpose);
+    if (requestFolder !== currentFolder) {
+      setCurrentFolder(requestFolder);
+      return;
+    }
     const data = await fetchKnowledge({ q, purpose, folder: currentFolder });
     setItems(data.documents);
     if (!data.documents.some((item) => item.id === selectedId)) {
@@ -32,9 +37,15 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
   }
 
   async function loadFolder() {
-    const data = await fetchFolder(currentFolder, purpose);
+    const requestFolder = normalizeFolderForPurpose(currentFolder, purpose);
+    if (requestFolder !== currentFolder) {
+      setCurrentFolder(requestFolder);
+      return;
+    }
+    const data = await fetchFolder(requestFolder, purpose);
     setFolderInfo(data);
-    if (data.path !== currentFolder) setCurrentFolder(data.path);
+    const nextPath = normalizeFolderForPurpose(data.path, purpose);
+    if (nextPath !== currentFolder) setCurrentFolder(nextPath);
   }
 
   useEffect(() => {
@@ -174,4 +185,9 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
       </div>
     </section>
   );
+}
+
+function normalizeFolderForPurpose(folder: string, purpose: string) {
+  const root = `/${purpose}`;
+  return folder === root || folder.startsWith(`${root}/`) ? folder : root;
 }

@@ -275,6 +275,18 @@ h3 {
   grid-template-columns: minmax(260px, 1fr) 140px 140px 42px;
 }
 
+.pathBlock {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pathLabel {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .pathBar {
   display: flex;
   align-items: center;
@@ -458,9 +470,9 @@ input {
   color: #243241;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 14px;
-  cursor: pointer;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
   text-align: left;
 }
 
@@ -469,16 +481,37 @@ input {
   background: #f0f8f5;
 }
 
+.folderOpenButton {
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  cursor: pointer;
+  text-align: left;
+  padding: 0 4px;
+}
+
 .folderCard svg {
   color: #1f8f6b;
   flex: 0 0 auto;
 }
 
-.folderCard span {
+.folderOpenButton span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.folderDeleteButton {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
 }
 
 .folderEmpty {
