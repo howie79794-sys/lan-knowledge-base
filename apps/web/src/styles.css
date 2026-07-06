@@ -1226,6 +1226,64 @@ pre {
   padding: 16px;
 }
 
+.uploadModeSwitch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+}
+
+.uploadModeSwitch button {
+  height: 34px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-2);
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.uploadModeSwitch button.active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+}
+
+.markdownImportBox {
+  display: grid;
+  gap: 10px;
+}
+
+.markdownTextField {
+  display: grid;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.markdownTextField textarea {
+  min-height: 132px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.55;
+  box-shadow: var(--shadow-soft);
+}
+
+.markdownTextField textarea:disabled {
+  color: var(--ink-3);
+  background: var(--surface-soft);
+  cursor: not-allowed;
+}
+
 .compactForm {
   display: grid;
   gap: 10px;

@@ -290,6 +290,8 @@ function auditActionLabel(action: string) {
   const labels: Record<string, string> = {
     upload: "上传文件",
     overwrite_upload: "覆盖上传",
+    markdown_import: "导入 Markdown",
+    overwrite_markdown_import: "覆盖导入 Markdown",
     delete: "删除文件",
     create_folder: "新建文件夹",
     delete_folder: "删除文件夹",

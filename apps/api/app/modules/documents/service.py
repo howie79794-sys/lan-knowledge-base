@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -239,6 +240,143 @@ def create_document(
         for duplicate in duplicates:
             soft_delete_document(duplicate["id"])
     return document_id
+
+
+def create_markdown_knowledge(
+    file: UploadFile | None,
+    markdown: str | None,
+    filename: str | None,
+    purpose: str,
+    title: str | None,
+    source: str | None,
+    project: str | None,
+    uploader_name: str | None,
+    confidentiality: str,
+    folder_path: str | None,
+    overwrite: bool = False,
+) -> str:
+    canonical_purpose = normalize_purpose(purpose)
+    normalized_folder = ensure_purpose_folder_path(canonical_purpose, folder_path)
+    upload_filename = safe_filename((file.filename if file else filename) or markdown_filename_from_title(title))
+    ext = Path(upload_filename).suffix.lower()
+    if ext not in {".md", ".markdown", ".txt"}:
+        raise HTTPException(status_code=400, detail="Markdown 知识只支持 .md、.markdown 或 .txt 文件。")
+
+    duplicates = find_duplicate_documents(canonical_purpose, normalized_folder, upload_filename)
+    if duplicates and not overwrite:
+        raise HTTPException(status_code=409, detail=f"{upload_filename} 文件已经存在。")
+
+    if file:
+        content_bytes = read_upload_bytes(file)
+        try:
+            markdown_text = content_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Markdown 文件必须是 UTF-8 文本。") from exc
+    else:
+        markdown_text = (markdown or "").strip()
+        if not markdown_text:
+            raise HTTPException(status_code=400, detail="Markdown 正文不能为空。")
+        content_bytes = markdown_text.encode("utf-8")
+        if len(content_bytes) > settings.max_upload_mb * 1024 * 1024:
+            raise HTTPException(status_code=413, detail=f"单文件不能超过 {settings.max_upload_mb}MB。")
+
+    document_id = f"doc_{uuid4().hex}"
+    now = utc_now()
+    date_dir = datetime.now().strftime("%Y/%m")
+    storage_dir = Path(settings.upload_dir) / date_dir / document_id
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    storage_path = Path(date_dir) / document_id / upload_filename
+    target_path = Path(settings.upload_dir) / storage_path
+    target_path.write_bytes(content_bytes)
+
+    output_dir = Path(settings.processed_dir) / document_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "content.md").write_text(markdown_text, encoding="utf-8")
+    (output_dir / "content.txt").write_text(markdown_text, encoding="utf-8")
+    (output_dir / "metadata.json").write_text(
+        json.dumps(
+            {
+                "parser": "markdown-import",
+                "source": "direct-markdown",
+                "filename": upload_filename,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    display_title = (title or Path(upload_filename).stem).strip()
+    file_format = "markdown" if ext in {".md", ".markdown"} else "text"
+    with db_session() as conn:
+        insert_folder_paths(conn, canonical_purpose, normalized_folder)
+        conn.execute(
+            """
+            INSERT INTO documents (
+                id, title, original_filename, file_ext, file_format, mime_type, size_bytes,
+                checksum_sha256, storage_path, folder_path, status, content_excerpt, search_text,
+                error_message, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?, NULL, ?, ?)
+            """,
+            (
+                document_id,
+                display_title,
+                upload_filename,
+                ext.lstrip("."),
+                file_format,
+                file.content_type if file else "text/markdown",
+                len(content_bytes),
+                checksum_file(target_path),
+                str(storage_path),
+                normalized_folder,
+                markdown_text[:400],
+                markdown_text[:20000],
+                now,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO document_metadata (
+                document_id, purpose, source, project, confidentiality, uploader_name
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (document_id, canonical_purpose, source, project, confidentiality or "internal", uploader_name),
+        )
+        conn.execute(
+            """
+            INSERT INTO processed_artifacts (id, document_id, artifact_type, path, parser, parse_status, created_at)
+            VALUES (?, ?, 'markdown', ?, 'markdown-import', 'ready', ?)
+            """,
+            (str(uuid4()), document_id, f"{document_id}/content.md", now),
+        )
+    if overwrite:
+        for duplicate in duplicates:
+            soft_delete_document(duplicate["id"])
+    return document_id
+
+
+def read_upload_bytes(file: UploadFile) -> bytes:
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    content = file.file.read(max_bytes + 1)
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=413, detail=f"单文件不能超过 {settings.max_upload_mb}MB。")
+    return content
+
+
+def safe_filename(filename: str) -> str:
+    clean_name = Path(filename.replace("\\", "/")).name.strip()
+    if not clean_name or clean_name in {".", ".."}:
+        raise HTTPException(status_code=400, detail="文件名不能为空。")
+    return clean_name
+
+
+def markdown_filename_from_title(title: str | None) -> str:
+    clean_title = (title or "未命名知识").strip().replace("\\", "_").replace("/", "_")
+    stem = Path(clean_title or "未命名知识").stem
+    return f"{stem or '未命名知识'}.md"
 
 
 def find_duplicate_documents(purpose: str, folder_path: str | None, original_filename: str) -> list[dict]:

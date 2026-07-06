@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Copy, Download, Folder, FolderPlus, ListPlus, MoveRight, RefreshCcw, Trash2, UploadCloud } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Download, FileText, Folder, FolderPlus, ListPlus, MoveRight, RefreshCcw, Trash2, UploadCloud } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Categories, DocumentDetail, DocumentSummary, FolderResponse } from "../api/client";
 import {
@@ -11,6 +11,7 @@ import {
   fetchDuplicateDocuments,
   fetchDocuments,
   fetchFolder,
+  importMarkdownKnowledge,
   moveDocument,
   rawUrl,
   reprocessDocument,
@@ -69,6 +70,9 @@ export function DocumentsPage({
   const [project, setProject] = useState("");
   const [source, setSource] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [uploadMode, setUploadMode] = useState<"raw" | "markdown">("raw");
+  const [markdownFiles, setMarkdownFiles] = useState<File[]>([]);
+  const [markdownText, setMarkdownText] = useState("");
 
   const stats = useMemo(() => {
     return {
@@ -247,6 +251,90 @@ export function DocumentsPage({
       await loadDocuments(uploadedIds[uploadedIds.length - 1]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "上传失败。");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleMarkdownImport() {
+    const trimmedMarkdown = markdownText.trim();
+    if (!markdownFiles.length && !trimmedMarkdown) {
+      setMessage("请选择 Markdown 文件，或粘贴 Markdown 正文。");
+      return;
+    }
+    if (markdownFiles.length && trimmedMarkdown) {
+      setMessage("请在 Markdown 文件和粘贴正文中选择一种方式导入。");
+      return;
+    }
+    if (!markdownFiles.length && !title.trim()) {
+      setMessage("粘贴 Markdown 正文时，请先填写标题。");
+      return;
+    }
+
+    setUploading(true);
+    setMessage("");
+    try {
+      const importedIds: string[] = [];
+      const overwrittenFiles: string[] = [];
+      const skippedFiles: string[] = [];
+      const entries = markdownFiles.length
+        ? markdownFiles.map((file) => ({ file, filename: file.name }))
+        : [{ file: null, filename: `${safeMarkdownFilename(title)}.md` }];
+
+      for (const entry of entries) {
+        const duplicateData = await fetchDuplicateDocuments({
+          purpose,
+          folder: currentFolder,
+          filename: entry.filename
+        });
+        const shouldOverwrite =
+          duplicateData.documents.length > 0
+            ? window.confirm(
+                `${entry.filename}文件已经存在，是否要覆盖？如果覆盖，原来已经解析的内容将被删除。${
+                  entries.length > 1 ? "\n\n选择“取消”会跳过这个重复文件，并继续导入后面的文件。" : ""
+                }`
+              )
+            : false;
+        if (duplicateData.documents.length > 0 && !shouldOverwrite) {
+          skippedFiles.push(entry.filename);
+          continue;
+        }
+
+        const body = new FormData();
+        if (entry.file) {
+          body.set("file", entry.file);
+        } else {
+          body.set("markdown", trimmedMarkdown);
+          body.set("filename", entry.filename);
+        }
+        body.set("purpose", purpose);
+        body.set("folder_path", currentFolder);
+        body.set("title", markdownFiles.length === 1 || !entry.file ? title : "");
+        body.set("uploader_name", uploader);
+        body.set("project", project);
+        body.set("source", source);
+        if (shouldOverwrite) body.set("overwrite", "true");
+        const result = await importMarkdownKnowledge(body);
+        importedIds.push(result.id);
+        if (shouldOverwrite) overwrittenFiles.push(entry.filename);
+      }
+
+      if (!importedIds.length) {
+        setMessage(skippedFiles.length ? `已跳过 ${skippedFiles.length} 个重复 Markdown，没有导入新知识。` : "没有导入新知识。");
+        return;
+      }
+      setMarkdownFiles([]);
+      setMarkdownText("");
+      setTitle("");
+      const summaryParts = [`已导入 ${importedIds.length} 条 Markdown 知识到「${purpose}」，状态为已解析。`];
+      if (overwrittenFiles.length) summaryParts.push(`覆盖 ${overwrittenFiles.length} 个重复知识。`);
+      if (skippedFiles.length) summaryParts.push(`跳过 ${skippedFiles.length} 个重复知识。`);
+      setMessage(summaryParts.join(""));
+      onUploaded();
+      await loadFolder();
+      await loadDocuments(importedIds[importedIds.length - 1]);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "导入 Markdown 知识失败。");
     } finally {
       setUploading(false);
     }
@@ -540,23 +628,60 @@ export function DocumentsPage({
         <aside className="sidePanelStack">
           <div className="uploadCard">
             <div className="panelTitle">
-              <h3>上传材料</h3>
+              <h3>{uploadMode === "raw" ? "上传材料" : "导入 Markdown 知识"}</h3>
               <span>{purpose}</span>
             </div>
-            <label className="dropzone compactDropzone">
-              <UploadCloud size={28} />
-              <span>{files.length ? selectedFileLabel(files) : "选择文件（可多选）"}</span>
-              <small>上传后先保存为原始文件，批量上传默认使用各自文件名</small>
-              <input
-                type="file"
-                multiple
-                onChange={(event) => {
-                  const nextFiles = Array.from(event.target.files ?? []);
-                  setFiles(nextFiles);
-                  if (!title && nextFiles.length === 1) setTitle(nextFiles[0].name.replace(/\.[^.]+$/, ""));
-                }}
-              />
-            </label>
+            <div className="uploadModeSwitch" role="tablist" aria-label="上传方式">
+              <button className={uploadMode === "raw" ? "active" : ""} onClick={() => setUploadMode("raw")} type="button">
+                原始文件
+              </button>
+              <button className={uploadMode === "markdown" ? "active" : ""} onClick={() => setUploadMode("markdown")} type="button">
+                Markdown 知识
+              </button>
+            </div>
+            {uploadMode === "raw" ? (
+              <label className="dropzone compactDropzone">
+                <UploadCloud size={28} />
+                <span>{files.length ? selectedFileLabel(files) : "选择文件（可多选）"}</span>
+                <small>上传后先保存为原始文件，批量上传默认使用各自文件名</small>
+                <input
+                  type="file"
+                  multiple
+                  onChange={(event) => {
+                    const nextFiles = Array.from(event.target.files ?? []);
+                    setFiles(nextFiles);
+                    if (!title && nextFiles.length === 1) setTitle(nextFiles[0].name.replace(/\.[^.]+$/, ""));
+                  }}
+                />
+              </label>
+            ) : (
+              <div className="markdownImportBox">
+                <label className="dropzone compactDropzone">
+                  <FileText size={28} />
+                  <span>{markdownFiles.length ? selectedFileLabel(markdownFiles) : "选择 Markdown 文件（可多选）"}</span>
+                  <small>导入后直接进入已解析状态，并出现在知识管理中</small>
+                  <input
+                    type="file"
+                    accept=".md,.markdown,.txt,text/markdown,text/plain"
+                    multiple
+                    onChange={(event) => {
+                      const nextFiles = Array.from(event.target.files ?? []);
+                      setMarkdownFiles(nextFiles);
+                      if (!title && nextFiles.length === 1) setTitle(nextFiles[0].name.replace(/\.[^.]+$/, ""));
+                    }}
+                  />
+                </label>
+                <label className="markdownTextField">
+                  <span>或粘贴 Markdown 正文</span>
+                  <textarea
+                    value={markdownText}
+                    onChange={(event) => setMarkdownText(event.target.value)}
+                    placeholder="粘贴 Markdown 正文时，请填写标题；系统会保存为一份 .md 知识。"
+                    disabled={markdownFiles.length > 0}
+                  />
+                </label>
+              </div>
+            )}
             <div className="compactForm">
               <label>
                 当前上传位置
@@ -578,9 +703,15 @@ export function DocumentsPage({
                 来源
                 <input value={source} onChange={(event) => setSource(event.target.value)} placeholder="可选" />
               </label>
-              <button className="primaryButton" onClick={handleUpload} disabled={uploading}>
-                {uploading ? "上传中..." : files.length > 1 ? `上传 ${files.length} 个文件` : "上传到当前分类"}
-              </button>
+              {uploadMode === "raw" ? (
+                <button className="primaryButton" onClick={handleUpload} disabled={uploading}>
+                  {uploading ? "上传中..." : files.length > 1 ? `上传 ${files.length} 个文件` : "上传到当前分类"}
+                </button>
+              ) : (
+                <button className="primaryButton" onClick={handleMarkdownImport} disabled={uploading}>
+                  {uploading ? "导入中..." : markdownFiles.length > 1 ? `导入 ${markdownFiles.length} 条知识` : "导入为已解析知识"}
+                </button>
+              )}
             </div>
           </div>
 
@@ -766,4 +897,8 @@ function selectedFileLabel(files: File[]) {
   if (files.length === 1) return files[0].name;
   const firstName = files[0]?.name ?? "";
   return `已选择 ${files.length} 个文件，首个：${firstName}`;
+}
+
+function safeMarkdownFilename(title: string) {
+  return (title.trim() || "未命名知识").replace(/\.(md|markdown|txt)$/i, "").replace(/[\\/:*?"<>|]+/g, "_");
 }

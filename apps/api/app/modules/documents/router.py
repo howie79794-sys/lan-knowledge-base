@@ -11,6 +11,7 @@ from app.modules.documents.service import (
     content_file_path,
     create_folder,
     create_document,
+    create_markdown_knowledge,
     delete_folder,
     find_duplicate_documents,
     get_document,
@@ -51,6 +52,43 @@ def upload_document(
     document_id = create_document(file, purpose, title, source, project, uploader_name, confidentiality, folder_path, overwrite)
     write_audit("overwrite_upload" if overwrite else "upload", document_id=document_id, actor=uploader_name, ip=request.client.host if request.client else None)
     return {"id": document_id, "status": "uploaded"}
+
+
+@router.post("/knowledge/import-markdown")
+def import_markdown_knowledge(
+    request: Request,
+    file: UploadFile | None = File(None),
+    markdown: str | None = Form(None),
+    filename: str | None = Form(None),
+    purpose: str = Form("业务知识"),
+    folder_path: str = Form("/"),
+    title: str | None = Form(None),
+    source: str | None = Form(None),
+    project: str | None = Form(None),
+    uploader_name: str | None = Form(None),
+    confidentiality: str = Form("internal"),
+    overwrite: bool = Form(False),
+):
+    document_id = create_markdown_knowledge(
+        file,
+        markdown,
+        filename,
+        purpose,
+        title,
+        source,
+        project,
+        uploader_name,
+        confidentiality,
+        folder_path,
+        overwrite,
+    )
+    write_audit(
+        "overwrite_markdown_import" if overwrite else "markdown_import",
+        document_id=document_id,
+        actor=uploader_name,
+        ip=request.client.host if request.client else None,
+    )
+    return {"id": document_id, "status": "ready"}
 
 
 @router.get("/documents", response_model=DocumentListResponse)

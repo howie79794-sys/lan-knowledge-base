@@ -165,6 +165,13 @@ export async function uploadDocument(formData: FormData) {
   });
 }
 
+export async function importMarkdownKnowledge(formData: FormData) {
+  return request<{ id: string; status: string }>("/api/v1/knowledge/import-markdown", {
+    method: "POST",
+    body: formData
+  });
+}
+
 export async function reprocessDocument(id: string) {
   return request<{ id: string; status: string; job_id: string }>(`/api/v1/documents/${id}/reprocess`, { method: "POST" });
 }
