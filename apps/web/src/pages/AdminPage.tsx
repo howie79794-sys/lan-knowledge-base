@@ -271,6 +271,7 @@ function auditActionLabel(action: string) {
     delete: "删除文件",
     create_parse_job: "创建单文件解析任务",
     create_parse_jobs_batch: "批量创建解析任务",
+    claim_parse_job: "领取解析任务",
     complete_parse_job: "解析完成",
     fail_parse_job: "解析失败"
   };

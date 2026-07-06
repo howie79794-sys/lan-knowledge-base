@@ -64,6 +64,11 @@ class BatchCreateParseJobsResponse(BaseModel):
     document_ids: list[str]
 
 
+class ClaimSelectedParseJobsRequest(BaseModel):
+    job_ids: list[str] = Field(default_factory=list, min_length=1, max_length=20)
+    worker: str | None = None
+
+
 class ClaimParseJobsResponse(BaseModel):
     jobs: list[ParseJobWorkItem]
 

@@ -181,6 +181,31 @@ def list_parse_queue(limit: int = 200, offset: int = 0) -> dict:
     }
 
 
+def work_item_to_response(row, worker_name: str, request: Request, now: str) -> dict:
+    raw_path = raw_file_path(row["document_id"])
+    return {
+        **job_to_summary(
+            {
+                **dict(row),
+                "status": "processing",
+                "worker": worker_name,
+                "attempts": row["attempts"] + 1,
+                "started_at": row["started_at"] or now,
+                "updated_at": now,
+            }
+        ),
+        "title": row["title"],
+        "original_filename": row["original_filename"],
+        "file_format": row["file_format"],
+        "file_ext": row["file_ext"],
+        "folder_path": row["folder_path"],
+        "purpose": display_purpose(row["purpose"]),
+        "size_bytes": row["size_bytes"],
+        "raw_url": str(request.url_for("download_raw", document_id=row["document_id"])),
+        "raw_path": str(raw_path),
+    }
+
+
 def claim_next_jobs(limit: int, worker: str | None, request: Request) -> list[dict]:
     safe_limit = min(max(limit, 1), 20)
     now = utc_now()
@@ -222,22 +247,63 @@ def claim_next_jobs(limit: int, worker: str | None, request: Request) -> list[di
 
     claimed: list[dict] = []
     for row in rows:
-        raw_path = raw_file_path(row["document_id"])
-        claimed.append(
-            {
-                **job_to_summary({**dict(row), "status": "processing", "worker": worker_name, "attempts": row["attempts"] + 1, "started_at": row["started_at"] or now, "updated_at": now}),
-                "title": row["title"],
-                "original_filename": row["original_filename"],
-                "file_format": row["file_format"],
-                "file_ext": row["file_ext"],
-                "folder_path": row["folder_path"],
-                "purpose": display_purpose(row["purpose"]),
-                "size_bytes": row["size_bytes"],
-                "raw_url": str(request.url_for("download_raw", document_id=row["document_id"])),
-                "raw_path": str(raw_path),
-            }
-        )
+        claimed.append(work_item_to_response(row, worker_name, request, now))
     return claimed
+
+
+def claim_selected_jobs(job_ids: list[str], worker: str | None, request: Request) -> list[dict]:
+    unique_job_ids = list(dict.fromkeys(job_id for job_id in job_ids if job_id.strip()))
+    if not unique_job_ids:
+        raise HTTPException(status_code=400, detail="请选择要领取的解析任务。")
+    if len(unique_job_ids) > 20:
+        raise HTTPException(status_code=400, detail="一次最多领取 20 个解析任务。")
+
+    now = utc_now()
+    worker_name = worker or "qoder-work"
+    placeholders = ",".join("?" for _ in unique_job_ids)
+    with db_session() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT j.*, d.title, d.original_filename, d.file_format, d.file_ext,
+                   d.folder_path, d.size_bytes, d.status AS document_status, m.purpose
+            FROM parse_jobs j
+            JOIN documents d ON d.id = j.document_id
+            JOIN document_metadata m ON m.document_id = d.id
+            WHERE j.id IN ({placeholders})
+            ORDER BY j.created_at ASC
+            """,
+            unique_job_ids,
+        ).fetchall()
+        found_ids = {row["id"] for row in rows}
+        missing_ids = [job_id for job_id in unique_job_ids if job_id not in found_ids]
+        if missing_ids:
+            raise HTTPException(status_code=404, detail=f"解析任务不存在：{', '.join(missing_ids)}")
+
+        invalid_rows = [row for row in rows if row["status"] != "queued" or row["document_status"] != "queued"]
+        if invalid_rows:
+            invalid_text = "、".join(f"{row['id']}({row['status']})" for row in invalid_rows[:5])
+            raise HTTPException(status_code=400, detail=f"只能领取队列中的任务：{invalid_text}")
+
+        conn.execute(
+            f"""
+            UPDATE parse_jobs
+            SET status = 'processing', worker = ?, attempts = attempts + 1, started_at = COALESCE(started_at, ?), updated_at = ?
+            WHERE id IN ({placeholders})
+            """,
+            [worker_name, now, now, *unique_job_ids],
+        )
+        conn.execute(
+            f"""
+            UPDATE documents
+            SET status = 'processing', updated_at = ?
+            WHERE id IN (
+                SELECT document_id FROM parse_jobs WHERE id IN ({placeholders})
+            )
+            """,
+            [now, *unique_job_ids],
+        )
+
+    return [work_item_to_response(row, worker_name, request, now) for row in rows]
 
 
 def cancel_queued_parse_job(job_id: str) -> dict:

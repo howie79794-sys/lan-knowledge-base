@@ -8,6 +8,7 @@ from app.modules.parse_jobs.schemas import (
     BatchCreateParseJobsRequest,
     BatchCreateParseJobsResponse,
     ClaimParseJobsResponse,
+    ClaimSelectedParseJobsRequest,
     CompleteParseJobRequest,
     FailParseJobRequest,
     ParseQueueResponse,
@@ -15,6 +16,7 @@ from app.modules.parse_jobs.schemas import (
 )
 from app.modules.parse_jobs.service import (
     claim_next_jobs,
+    claim_selected_jobs,
     cancel_queued_parse_job,
     complete_parse_job,
     create_batch_parse_jobs,
@@ -77,6 +79,15 @@ def claim_parse_jobs(
 ):
     verify_worker_token(authorization)
     jobs = claim_next_jobs(limit=limit, worker=worker, request=request)
+    return {"jobs": jobs}
+
+
+@router.post("/parse-jobs/claim", response_model=ClaimParseJobsResponse)
+def claim_selected_parse_jobs(payload: ClaimSelectedParseJobsRequest, request: Request, authorization: str | None = Header(default=None)):
+    verify_worker_token(authorization)
+    jobs = claim_selected_jobs(job_ids=payload.job_ids, worker=payload.worker, request=request)
+    for job in jobs:
+        write_audit("claim_parse_job", document_id=job["document_id"], actor=payload.worker or "qoder-work", ip=request.client.host if request.client else None, message=job["id"])
     return {"jobs": jobs}
 
 

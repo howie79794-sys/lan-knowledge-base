@@ -297,7 +297,7 @@ curl -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
 function buildParseAgentGuide(baseUrl: string) {
   return `# Qoder Work 解析接口说明
 
-目标：让 Qoder Work 从网站解析队列领取待解析原始文件，解析完成后回写 Markdown/Text，更新网站状态。
+目标：让 Qoder Work 先查看待解析队列，询问用户选择要解析的文件，再只领取并解析用户指定的任务。
 
 Base URL:
 ${baseUrl}
@@ -307,7 +307,7 @@ ${baseUrl}
   Authorization: Bearer <KB_AGENT_READ_TOKEN>
 - 如果未配置或仍为默认 change-me，本地开发环境通常不会强制鉴权。
 
-一、查看解析队列（只读，供调试/观察）
+一、查看解析队列（只读，不改变任务状态）
 GET ${baseUrl}/api/v1/parse-jobs/queue?limit=500
 
 返回重点字段：
@@ -320,11 +320,19 @@ GET ${baseUrl}/api/v1/parse-jobs/queue?limit=500
 注意：
 - 上传后的文件默认只是 uploaded / 未解析，不会自动出现在解析队列。
 - 需要在网站后台点击“创建未解析文件任务”，或在原始文件列表选择未解析文件后点击“入队”，任务才会进入解析队列。
+- Qoder Work 应先把 queue 返回的清单展示给用户，并询问要解析哪些 job_id。
 
-二、领取待解析任务
-GET ${baseUrl}/api/v1/parse-jobs/next?limit=5&worker=qoder-work
+二、按用户选择领取任务（推荐交互式方式）
+POST ${baseUrl}/api/v1/parse-jobs/claim
+Content-Type: application/json
 
-领取后任务和文件会变为 processing。
+Body:
+{
+  "job_ids": ["job_xxx", "job_yyy"],
+  "worker": "qoder-work"
+}
+
+只会领取 job_ids 中指定的 queued 任务。领取后这些任务和文件会变为 processing；未选择的任务仍留在队列中。
 
 返回 jobs[] 重点字段：
 - id: job_id，后续 complete/fail 使用
@@ -334,14 +342,19 @@ GET ${baseUrl}/api/v1/parse-jobs/next?limit=5&worker=qoder-work
 - raw_url: 原文件下载地址
 - raw_path: 原文件在服务器上的本地路径（同机或共享目录可用）
 
-三、获取原文件
+三、自动领取下一批任务（可选，不推荐人工交互时使用）
+GET ${baseUrl}/api/v1/parse-jobs/next?limit=5&worker=qoder-work
+
+这个接口会直接领取队列前 N 个任务，适合无人值守 Worker，不适合需要用户选择文件的场景。
+
+四、获取原文件
 优先：
 GET jobs[].raw_url
 
 如果 Qoder Work 与服务端在同一机器或可访问同一挂载目录，也可以读取：
 jobs[].raw_path
 
-四、解析成功后回写结果
+五、解析成功后回写结果
 POST ${baseUrl}/api/v1/parse-jobs/{job_id}/complete
 Content-Type: application/json
 
@@ -360,8 +373,9 @@ Body:
 - document status 更新为 ready
 - content.md / content.txt / metadata.json 写入 processed 目录
 - 知识管理页可读取正文
+- 只有提交 complete 的任务会从解析队列消失，未解析的任务仍保留原状态。
 
-五、解析失败后回写错误
+六、解析失败后回写错误
 POST ${baseUrl}/api/v1/parse-jobs/{job_id}/fail
 Content-Type: application/json
 
@@ -377,7 +391,12 @@ Body:
 
 curl 示例：
 curl -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
-  "${baseUrl}/api/v1/parse-jobs/next?limit=5&worker=qoder-work"
+  "${baseUrl}/api/v1/parse-jobs/queue?limit=500"
+
+curl -X POST -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
+  -H "Content-Type: application/json" \\
+  -d '{"job_ids":["job_xxx"],"worker":"qoder-work"}' \\
+  "${baseUrl}/api/v1/parse-jobs/claim"
 
 curl -X POST -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
   -H "Content-Type: application/json" \\
