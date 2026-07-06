@@ -740,66 +740,47 @@ input {
 }
 
 .knowledgeList {
-  padding: 14px;
-  display: grid;
-  gap: 12px;
-}
-
-.knowledgeCard {
-  border: 1px solid var(--line);
-  background: var(--surface);
-  border-radius: 10px;
-  padding: 14px;
-  display: grid;
-  gap: 10px;
-  text-align: left;
-  cursor: pointer;
-  box-shadow: var(--shadow-soft);
-}
-
-.knowledgeCard:hover,
-.knowledgeCard.selected {
-  border-color: var(--line-strong);
-  background: var(--surface-strong);
-}
-
-.knowledgeCard.selected {
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-
-.knowledgeCardHeader {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.knowledgeCardHeader strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.knowledgeCard p {
-  color: var(--ink-2);
-  font-size: 13px;
-  line-height: 1.7;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.knowledgeCardMeta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  color: var(--ink-3);
-  font-size: 12px;
+.knowledgeTableWrap {
+  max-height: calc(100vh - 330px);
+  min-height: 360px;
 }
 
-.knowledgeCardMeta span {
-  min-width: 0;
-  overflow-wrap: anywhere;
+.knowledgeTable {
+  min-width: 760px;
+}
+
+.knowledgeTable th:first-child,
+.knowledgeTable td:first-child {
+  width: 42%;
+}
+
+.knowledgeTable th:nth-child(2),
+.knowledgeTable td:nth-child(2) {
+  width: 110px;
+}
+
+.knowledgeTable th:nth-child(3),
+.knowledgeTable td:nth-child(3),
+.knowledgeTable th:nth-child(4),
+.knowledgeTable td:nth-child(4) {
+  width: 82px;
+}
+
+.knowledgeTable th:nth-child(5),
+.knowledgeTable td:nth-child(5) {
+  width: 92px;
+}
+
+.knowledgeTable th:nth-child(6),
+.knowledgeTable td:nth-child(6) {
+  width: 116px;
+}
+
+.knowledgeDocTitle {
+  max-width: min(460px, 34vw);
 }
 
 .knowledgeGroup {

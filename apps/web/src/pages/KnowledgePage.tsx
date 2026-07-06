@@ -6,6 +6,16 @@ import { StatusBadge } from "../components/StatusBadge";
 import { copyText } from "../utils/clipboard";
 import { FolderNavigator } from "./DocumentsPage";
 
+const formatLabels: Record<string, string> = {
+  pdf: "PDF",
+  ppt: "PPT",
+  excel: "Excel",
+  word: "Word",
+  csv: "CSV",
+  text: "Text",
+  markdown: "MD"
+};
+
 export function KnowledgePage({ purpose }: { purpose: string }) {
   const [q, setQ] = useState("");
   const [items, setItems] = useState<DocumentSummary[]>([]);
@@ -119,25 +129,46 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
 
       <div className="knowledgeLayout">
         <div className="knowledgeList">
-          {!items.length && (
+          {items.length ? (
+            <div className="tableWrap knowledgeTableWrap">
+              <table className="knowledgeTable">
+                <thead>
+                  <tr>
+                    <th>资料</th>
+                    <th>作用</th>
+                    <th>格式</th>
+                    <th>大小</th>
+                    <th>状态</th>
+                    <th>更新时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.id} className={selectedId === item.id ? "selectedRow" : ""} onClick={() => setSelectedId(item.id)}>
+                      <td>
+                        <div className="docTitle knowledgeDocTitle">{item.title}</div>
+                        <div className="docMeta">{item.original_filename}</div>
+                      </td>
+                      <td>{item.purpose}</td>
+                      <td>
+                        <span className="formatPill">{formatLabels[item.file_format] ?? item.file_format}</span>
+                      </td>
+                      <td>{formatBytes(item.size_bytes)}</td>
+                      <td>
+                        <StatusBadge status={item.status} />
+                      </td>
+                      <td>{formatDate(item.updated_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
             <div className="emptyState">
               <Database size={28} />
               <p>这个分类下还没有解析好的知识。请先到对应原始文件分类上传，再到后台统一解析。</p>
             </div>
           )}
-          {items.map((item) => (
-            <button key={item.id} className={selectedId === item.id ? "knowledgeCard selected" : "knowledgeCard"} onClick={() => setSelectedId(item.id)}>
-              <div className="knowledgeCardHeader">
-                <strong>{item.title}</strong>
-                <StatusBadge status={item.status} />
-              </div>
-              <p>{item.content_excerpt || "这条知识还没有可展示的概览。"}</p>
-              <div className="knowledgeCardMeta">
-                <span>{item.original_filename}</span>
-                <span>{item.folder_path}</span>
-              </div>
-            </button>
-          ))}
         </div>
 
         <aside className="detailPane">
@@ -191,4 +222,21 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
 function normalizeFolderForPurpose(folder: string, purpose: string) {
   const root = `/${purpose}`;
   return folder === root || folder.startsWith(`${root}/`) ? folder : root;
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(1)} MB`;
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
 }
