@@ -1,4 +1,4 @@
-import { ChevronDown, Clipboard, Database, FileText, Library, Settings, X } from "lucide-react";
+import { ChevronDown, Clipboard, Database, Download, FileText, Library, Settings, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Categories } from "./api/client";
 import { fetchCategories } from "./api/client";
@@ -225,7 +225,7 @@ GET ${window.location.origin}/api/v1/documents/{document_id}/content?format=mark
                 <div className="agentGuideTop">
                   <div>
                     <h4>Qoder Work 解析接口</h4>
-                    <p>适用于解析 Worker 获取待解析文件、下载原始文件、提交 Markdown/Text 结果。</p>
+                    <p>适用于先查看队列、由用户选择任务，再领取原文件并回写 Markdown/Text。</p>
                   </div>
                   <button className="secondaryButton" onClick={() => copyAgentGuide("parse")}>
                     <Clipboard size={15} />
@@ -233,14 +233,33 @@ GET ${window.location.origin}/api/v1/documents/{document_id}/content?format=mark
                   </button>
                 </div>
                 <ol>
-                  <li>请求 <code>GET /api/v1/parse-jobs/next?limit=5&amp;worker=qoder-work</code> 领取队列任务。</li>
-                  <li>使用返回的 <code>raw_url</code> 下载原文件，或在同机环境读取 <code>raw_path</code>。</li>
+                  <li>请求 <code>GET /api/v1/parse-jobs/queue?limit=500</code> 查看待解析清单。</li>
+                  <li>让用户选择一个或多个 <code>job_id</code> 后，调用 <code>POST /api/v1/parse-jobs/claim</code>。</li>
+                  <li>使用 claim 返回的 <code>raw_url</code> 下载原文件。</li>
                   <li>解析成功后提交 <code>POST /api/v1/parse-jobs/{`{job_id}`}/complete</code>。</li>
                   <li>解析失败后提交 <code>POST /api/v1/parse-jobs/{`{job_id}`}/fail</code>。</li>
                 </ol>
-                <pre>{`GET ${window.location.origin}/api/v1/parse-jobs/next?limit=5&worker=qoder-work
+                <pre>{`GET ${window.location.origin}/api/v1/parse-jobs/queue?limit=500
+POST ${window.location.origin}/api/v1/parse-jobs/claim
 POST ${window.location.origin}/api/v1/parse-jobs/{job_id}/complete
 POST ${window.location.origin}/api/v1/parse-jobs/{job_id}/fail`}</pre>
+              </section>
+
+              <section className="agentGuideCard skillDownloadCard">
+                <div className="agentGuideTop">
+                  <div>
+                    <h4>文档转 Markdown Skill</h4>
+                    <p>给 Qoder Work 安装使用，支持把 PDF、PPTX、DOCX、XLSX 等原始文件转换为 Markdown，并补充图片识别结果。</p>
+                  </div>
+                  <a className="secondaryButton" href="/downloads/doc-to-markdown.skill" download>
+                    <Download size={15} />
+                    下载 Skill
+                  </a>
+                </div>
+                <ol>
+                  <li>下载后交给 Qoder Work 导入或安装。</li>
+                  <li>配合上方解析接口使用：领取任务后下载 <code>raw_url</code>，转换为 Markdown，再回写 <code>complete</code>。</li>
+                </ol>
               </section>
             </div>
           </div>

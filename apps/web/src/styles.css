@@ -1493,6 +1493,11 @@ pre {
   background: var(--surface);
 }
 
+.skillDownloadCard {
+  grid-column: 1 / -1;
+  background: var(--surface);
+}
+
 @media (max-width: 1120px) {
   .appShell {
     grid-template-columns: 1fr;
