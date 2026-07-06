@@ -5,6 +5,7 @@ import { fetchCategories } from "./api/client";
 import { AdminPage } from "./pages/AdminPage";
 import { DocumentsPage } from "./pages/DocumentsPage";
 import { KnowledgePage } from "./pages/KnowledgePage";
+import { copyText } from "./utils/clipboard";
 
 const FALLBACK_PURPOSES = [
   "招投标需求清单",
@@ -46,8 +47,13 @@ export function App() {
   async function copyAgentGuide(kind: "read" | "parse") {
     const baseUrl = window.location.origin;
     const text = kind === "read" ? buildReadAgentGuide(baseUrl) : buildParseAgentGuide(baseUrl);
-    await navigator.clipboard.writeText(text);
-    setAgentMessage(kind === "read" ? "已复制：其他 Agent 读取知识说明。" : "已复制：Qoder Work 解析接口说明。");
+    const copied = await copyText(text);
+    if (copied) {
+      setAgentMessage(kind === "read" ? "已复制：其他 Agent 读取知识说明。" : "已复制：Qoder Work 解析接口说明。");
+      return;
+    }
+    setShowAgentGuide(true);
+    setAgentMessage("浏览器限制了自动复制，请在弹窗中手动选中说明文字复制。");
   }
 
   return (
@@ -209,7 +215,7 @@ export function App() {
                 <ol>
                   <li>请求 <code>GET /api/v1/manifest</code> 获取所有 <code>ready</code> 知识清单。</li>
                   <li>读取返回的 <code>content_url</code>，拿到 Markdown 正文。</li>
-                  <li>如配置了 <code>AGENT_READ_TOKEN</code>，请求头带 <code>Authorization: Bearer TOKEN</code>。</li>
+                  <li>如配置了 <code>KB_AGENT_READ_TOKEN</code>，请求头带 <code>Authorization: Bearer TOKEN</code>。</li>
                 </ol>
                 <pre>{`GET ${window.location.origin}/api/v1/manifest
 GET ${window.location.origin}/api/v1/documents/{document_id}/content?format=markdown`}</pre>
@@ -253,8 +259,8 @@ Base URL:
 ${baseUrl}
 
 认证：
-- 如果服务端配置了 AGENT_READ_TOKEN，请在请求头加入：
-  Authorization: Bearer <AGENT_READ_TOKEN>
+- 如果服务端配置了 KB_AGENT_READ_TOKEN，请在请求头加入：
+  Authorization: Bearer <KB_AGENT_READ_TOKEN>
 - 如果未配置或仍为默认 change-me，本地读取接口通常不会强制鉴权。
 
 读取流程：
@@ -280,10 +286,10 @@ ${baseUrl}
 - 引用答案时保留 title、purpose、folder_path，方便追溯来源。
 
 示例：
-curl -H "Authorization: Bearer <AGENT_READ_TOKEN>" \\
+curl -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
   "${baseUrl}/api/v1/manifest"
 
-curl -H "Authorization: Bearer <AGENT_READ_TOKEN>" \\
+curl -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
   "${baseUrl}/api/v1/documents/{document_id}/content?format=markdown"
 `;
 }
@@ -297,8 +303,9 @@ Base URL:
 ${baseUrl}
 
 认证：
-- 如果服务端配置了 AGENT_READ_TOKEN，请在请求头加入：
-  Authorization: Bearer <AGENT_READ_TOKEN>
+- 如果服务端配置了 KB_AGENT_READ_TOKEN，请在请求头加入：
+  Authorization: Bearer <KB_AGENT_READ_TOKEN>
+- 如果未配置或仍为默认 change-me，本地开发环境通常不会强制鉴权。
 
 一、查看解析队列（只读，供调试/观察）
 GET ${baseUrl}/api/v1/parse-jobs/queue?limit=500
@@ -307,8 +314,12 @@ GET ${baseUrl}/api/v1/parse-jobs/queue?limit=500
 - document_id: 原始文件 ID
 - title / original_filename: 文件标题与原始文件名
 - purpose / folder_path: 所属知识分类与路径
-- document_status: uploaded / queued / processing / failed
+- document_status: queued / processing / failed
 - job_id / job_status / worker / attempts: 解析任务信息
+
+注意：
+- 上传后的文件默认只是 uploaded / 未解析，不会自动出现在解析队列。
+- 需要在网站后台点击“创建未解析文件任务”，或在原始文件列表选择未解析文件后点击“入队”，任务才会进入解析队列。
 
 二、领取待解析任务
 GET ${baseUrl}/api/v1/parse-jobs/next?limit=5&worker=qoder-work
@@ -365,10 +376,10 @@ Body:
 - 网站后台解析队列显示错误信息
 
 curl 示例：
-curl -H "Authorization: Bearer <AGENT_READ_TOKEN>" \\
+curl -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
   "${baseUrl}/api/v1/parse-jobs/next?limit=5&worker=qoder-work"
 
-curl -X POST -H "Authorization: Bearer <AGENT_READ_TOKEN>" \\
+curl -X POST -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
   -H "Content-Type: application/json" \\
   -d '{"markdown":"# title","text":"title","metadata":{},"worker":"qoder-work"}' \\
   "${baseUrl}/api/v1/parse-jobs/{job_id}/complete"

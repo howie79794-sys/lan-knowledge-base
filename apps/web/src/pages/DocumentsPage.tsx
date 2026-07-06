@@ -18,6 +18,7 @@ import {
 import { DocumentFilters, type Filters } from "../components/DocumentFilters";
 import { DocumentTable } from "../components/DocumentTable";
 import { StatusBadge } from "../components/StatusBadge";
+import { copyText } from "../utils/clipboard";
 
 const defaultFilters: Filters = { purpose: "", format: "", status: "", q: "" };
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
@@ -400,11 +401,11 @@ export function DocumentsPage({
     setCurrentFolder(path);
   }
 
-  function copyAgentLink() {
+  async function copyAgentLink() {
     if (!detail) return;
     const url = `${window.location.origin}/api/v1/documents/${detail.id}/content?format=markdown`;
-    navigator.clipboard.writeText(url);
-    setMessage("解析正文链接已复制。");
+    const copied = await copyText(url);
+    setMessage(copied ? "解析正文链接已复制。" : "浏览器限制了自动复制，请手动复制正文链接。");
   }
 
   return (

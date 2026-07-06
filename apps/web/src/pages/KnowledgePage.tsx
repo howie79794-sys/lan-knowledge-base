@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { DocumentSummary, FolderResponse } from "../api/client";
 import { fetchContent, fetchDocument, fetchFolder, fetchKnowledge, type DocumentDetail } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
+import { copyText } from "../utils/clipboard";
 import { FolderNavigator } from "./DocumentsPage";
 
 export function KnowledgePage({ purpose }: { purpose: string }) {
@@ -79,11 +80,11 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
     fetchContent(selectedId).then(setContent).catch(() => setContent(""));
   }, [selectedId]);
 
-  function copyKnowledgeLink() {
+  async function copyKnowledgeLink() {
     if (!detail) return;
     const url = `${window.location.origin}/api/v1/documents/${detail.id}/content?format=markdown`;
-    navigator.clipboard.writeText(url);
-    setMessage("知识正文链接已复制。");
+    const copied = await copyText(url);
+    setMessage(copied ? "知识正文链接已复制。" : "浏览器限制了自动复制，请手动复制地址栏或正文链接。");
   }
 
   return (

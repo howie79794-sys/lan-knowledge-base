@@ -29,7 +29,7 @@ router = APIRouter(prefix="/api/v1", tags=["parse-jobs"])
 
 def verify_worker_token(authorization: str | None) -> None:
     token = settings.agent_read_token
-    if not token:
+    if not token or token == "change-me":
         return
     expected = f"Bearer {token}"
     if authorization != expected:
