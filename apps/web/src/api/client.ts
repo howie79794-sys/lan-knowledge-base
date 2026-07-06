@@ -202,6 +202,10 @@ export async function fetchAuditLogs() {
   return request<{ logs: AuditLog[] }>("/api/v1/audit-logs");
 }
 
+export async function clearOldAuditLogs(days = 7) {
+  return request<{ deleted: number; cutoff: string }>(`/api/v1/audit-logs/older-than?days=${days}`, { method: "DELETE" });
+}
+
 export function rawUrl(id: string) {
   return `${API_BASE}/api/v1/documents/${id}/raw`;
 }

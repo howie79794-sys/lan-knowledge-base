@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from app.db.session import db_session
@@ -44,3 +44,12 @@ def write_audit(action: str, document_id: str | None = None, actor: str | None =
             """,
             (MAX_AUDIT_LOGS,),
         )
+
+
+def delete_audit_logs_older_than(days: int = 7) -> dict:
+    safe_days = max(days, 1)
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=safe_days)).isoformat()
+    with db_session() as conn:
+        cursor = conn.execute("DELETE FROM audit_logs WHERE created_at < ?", (cutoff,))
+        deleted = cursor.rowcount if cursor.rowcount is not None else 0
+    return {"deleted": deleted, "cutoff": cutoff}

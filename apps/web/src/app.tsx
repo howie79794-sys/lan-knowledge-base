@@ -64,8 +64,8 @@ export function App() {
             <Database size={22} />
           </div>
           <div>
-            <strong>局域网知识库</strong>
-            <span>LAN Knowledge Base</span>
+            <strong>司库知识库</strong>
+            <span>好记性不如MarkDown</span>
           </div>
         </div>
         <nav className="treeNav">
@@ -270,7 +270,7 @@ POST ${window.location.origin}/api/v1/parse-jobs/{job_id}/fail`}</pre>
 }
 
 function buildReadAgentGuide(baseUrl: string) {
-  return `# 局域网知识库 Agent 读取说明
+  return `# 司库知识库 Agent 读取说明
 
 目标：让局域网内其他 Agent 读取网站中已经解析完成的知识内容。
 

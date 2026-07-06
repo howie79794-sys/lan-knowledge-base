@@ -67,7 +67,6 @@ export function DocumentsPage({
   const [uploader, setUploader] = useState("");
   const [project, setProject] = useState("");
   const [source, setSource] = useState("");
-  const [confidentiality, setConfidentiality] = useState("internal");
   const [uploading, setUploading] = useState(false);
 
   const stats = useMemo(() => {
@@ -207,7 +206,6 @@ export function DocumentsPage({
         body.set("uploader_name", uploader);
         body.set("project", project);
         body.set("source", source);
-        body.set("confidentiality", confidentiality);
         const result = await uploadDocument(body);
         uploadedIds.push(result.id);
       }
@@ -549,14 +547,6 @@ export function DocumentsPage({
               <label>
                 来源
                 <input value={source} onChange={(event) => setSource(event.target.value)} placeholder="可选" />
-              </label>
-              <label>
-                敏感等级
-                <select value={confidentiality} onChange={(event) => setConfidentiality(event.target.value)}>
-                  <option value="public">公开资料</option>
-                  <option value="internal">内部资料</option>
-                  <option value="sensitive">敏感资料</option>
-                </select>
               </label>
               <button className="primaryButton" onClick={handleUpload} disabled={uploading}>
                 {uploading ? "上传中..." : files.length > 1 ? `上传 ${files.length} 个文件` : "上传到当前分类"}

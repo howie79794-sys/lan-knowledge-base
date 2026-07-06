@@ -1,13 +1,14 @@
 import { Activity, Database, KeyRound, Network, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AuditLog, ParseQueueItem } from "../api/client";
-import { cancelParseJob, fetchAuditLogs, fetchDocuments, fetchHealth, fetchParseQueue, processUnprocessed } from "../api/client";
+import { cancelParseJob, clearOldAuditLogs, fetchAuditLogs, fetchDocuments, fetchHealth, fetchParseQueue, processUnprocessed } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
 
 export function AdminPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [showAudit, setShowAudit] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [clearingAudit, setClearingAudit] = useState(false);
   const [queueItems, setQueueItems] = useState<ParseQueueItem[]>([]);
   const [queueTotal, setQueueTotal] = useState(0);
   const [unprocessed, setUnprocessed] = useState(0);
@@ -89,6 +90,21 @@ export function AdminPage() {
       setLogs([]);
     } finally {
       setAuditLoading(false);
+    }
+  }
+
+  async function clearAuditLogsOlderThan7Days() {
+    if (!window.confirm("确认清除超过 7 天的最近操作记录？")) return;
+    setClearingAudit(true);
+    try {
+      const result = await clearOldAuditLogs(7);
+      const data = await fetchAuditLogs();
+      setLogs(data.logs);
+      setMessage(`已清除 ${result.deleted} 条超过 7 天的操作记录。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "清除操作记录失败。");
+    } finally {
+      setClearingAudit(false);
     }
   }
 
@@ -223,9 +239,14 @@ export function AdminPage() {
                 <h3>最近操作</h3>
                 <p>只记录上传、删除、创建解析任务、解析完成和解析失败等关键事件。</p>
               </div>
-              <button className="iconButton" onClick={() => setShowAudit(false)} title="关闭">
-                <X size={17} />
-              </button>
+              <div className="modalActions">
+                <button className="secondaryButton dangerText" onClick={clearAuditLogsOlderThan7Days} disabled={clearingAudit || auditLoading}>
+                  {clearingAudit ? "清除中..." : "清除超7天记录"}
+                </button>
+                <button className="iconButton" onClick={() => setShowAudit(false)} title="关闭">
+                  <X size={17} />
+                </button>
+              </div>
             </div>
             <div className="tableWrap">
               <table>

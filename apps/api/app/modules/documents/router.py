@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 
 from app.core.config import ALLOWED_EXTENSIONS, DOCUMENT_PURPOSES
 from app.db.session import db_session
-from app.modules.audit.service import AUDITED_ACTIONS, write_audit
+from app.modules.audit.service import AUDITED_ACTIONS, delete_audit_logs_older_than, write_audit
 from app.modules.documents.schemas import CategoryResponse, CreateFolderRequest, DocumentListResponse, FolderEntry, FolderResponse, MoveDocumentRequest
 from app.modules.documents.service import (
     content_file_path,
@@ -173,3 +173,8 @@ def audit_logs():
             actions,
         ).fetchall()
     return {"logs": [dict(row) for row in rows]}
+
+
+@router.delete("/audit-logs/older-than")
+def delete_old_audit_logs(days: int = 7):
+    return delete_audit_logs_older_than(days)

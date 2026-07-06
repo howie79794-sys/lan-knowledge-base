@@ -11,7 +11,6 @@ export function UploadPage({ categories, onUploaded }: { categories: Categories 
   const [uploader, setUploader] = useState("");
   const [project, setProject] = useState("");
   const [source, setSource] = useState("");
-  const [confidentiality, setConfidentiality] = useState("internal");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -32,7 +31,6 @@ export function UploadPage({ categories, onUploaded }: { categories: Categories 
     body.set("uploader_name", uploader);
     body.set("project", project);
     body.set("source", source);
-    body.set("confidentiality", confidentiality);
     setBusy(true);
     setMessage("");
     try {
@@ -106,14 +104,6 @@ export function UploadPage({ categories, onUploaded }: { categories: Categories 
           <label>
             来源
             <input value={source} onChange={(event) => setSource(event.target.value)} placeholder="可选" />
-          </label>
-          <label>
-            敏感等级
-            <select value={confidentiality} onChange={(event) => setConfidentiality(event.target.value)}>
-              <option value="public">公开资料</option>
-              <option value="internal">内部资料</option>
-              <option value="sensitive">敏感资料</option>
-            </select>
           </label>
           <button className="primaryButton" onClick={submit} disabled={busy}>
             {busy ? "上传中..." : "上传原始文件"}
