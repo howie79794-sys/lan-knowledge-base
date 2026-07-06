@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -461,6 +462,30 @@ def content_file_path(document_id: str) -> Path:
 
 
 def soft_delete_document(document_id: str) -> None:
-    get_document(document_id)
+    doc = get_document(document_id)
+    raw_path = Path(settings.upload_dir) / doc["storage_path"]
+    processed_path = Path(settings.processed_dir) / document_id
+
+    if raw_path.parent.exists():
+        shutil.rmtree(raw_path.parent, ignore_errors=True)
+    elif raw_path.exists():
+        raw_path.unlink(missing_ok=True)
+    shutil.rmtree(processed_path, ignore_errors=True)
+
+    now = utc_now()
     with db_session() as conn:
-        conn.execute("UPDATE documents SET status = 'deleted', updated_at = ? WHERE id = ?", (utc_now(), document_id))
+        conn.execute("DELETE FROM processed_artifacts WHERE document_id = ?", (document_id,))
+        conn.execute("DELETE FROM parse_jobs WHERE document_id = ?", (document_id,))
+        conn.execute("DELETE FROM conversion_jobs WHERE document_id = ?", (document_id,))
+        conn.execute(
+            """
+            UPDATE documents
+            SET status = 'deleted',
+                content_excerpt = NULL,
+                search_text = NULL,
+                error_message = NULL,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (now, document_id),
+        )

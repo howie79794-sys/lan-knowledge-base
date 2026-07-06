@@ -124,7 +124,7 @@ def list_parse_queue(limit: int = 200, offset: int = 0) -> dict:
             """
             SELECT COUNT(*) AS count
             FROM documents
-            WHERE status IN ('uploaded', 'queued', 'processing', 'failed')
+            WHERE status IN ('queued', 'processing', 'failed')
             """
         ).fetchone()["count"]
         rows = conn.execute(
@@ -143,13 +143,12 @@ def list_parse_queue(limit: int = 200, offset: int = 0) -> dict:
                 ORDER BY created_at DESC
                 LIMIT 1
             )
-            WHERE d.status IN ('uploaded', 'queued', 'processing', 'failed')
+            WHERE d.status IN ('queued', 'processing', 'failed')
             ORDER BY
                 CASE d.status
                     WHEN 'processing' THEN 1
                     WHEN 'queued' THEN 2
-                    WHEN 'uploaded' THEN 3
-                    WHEN 'failed' THEN 4
+                    WHEN 'failed' THEN 3
                     ELSE 5
                 END,
                 d.updated_at DESC

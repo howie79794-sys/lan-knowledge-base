@@ -1,7 +1,8 @@
-import { ChevronLeft, ChevronRight, Copy, Download, Folder, FolderPlus, MoveRight, RefreshCcw, Trash2, UploadCloud } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Download, Folder, FolderPlus, ListPlus, MoveRight, RefreshCcw, Trash2, UploadCloud } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Categories, DocumentDetail, DocumentSummary, FolderResponse } from "../api/client";
 import {
+  createParseJobsBatch,
   createFolder,
   deleteDocument,
   deleteFolder,
@@ -20,6 +21,14 @@ import { StatusBadge } from "../components/StatusBadge";
 
 const defaultFilters: Filters = { purpose: "", format: "", status: "", q: "" };
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
+const documentStatusLabels: Record<DocumentSummary["status"], string> = {
+  uploaded: "未解析",
+  queued: "队列中",
+  processing: "解析中",
+  ready: "已解析",
+  failed: "解析失败",
+  deleted: "已删除"
+};
 
 export function DocumentsPage({
   categories,
@@ -38,6 +47,7 @@ export function DocumentsPage({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
@@ -46,6 +56,10 @@ export function DocumentsPage({
   const [folderInfo, setFolderInfo] = useState<FolderResponse | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [moveTargetPath, setMoveTargetPath] = useState(`/${purpose}`);
+  const [movingSelected, setMovingSelected] = useState(false);
+  const [queueingSelected, setQueueingSelected] = useState(false);
+  const [deletingSelected, setDeletingSelected] = useState(false);
 
   const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState("");
@@ -69,6 +83,18 @@ export function DocumentsPage({
   const totalPages = Math.max(1, Math.ceil(totalDocuments / pageSize));
   const pageStart = totalDocuments ? (page - 1) * pageSize + 1 : 0;
   const pageEnd = Math.min(page * pageSize, totalDocuments);
+  const selectedDocuments = useMemo(
+    () => documents.filter((doc) => selectedDocumentIds.includes(doc.id)),
+    [documents, selectedDocumentIds]
+  );
+  const normalizedMoveTarget = normalizeTypedFolderPath(moveTargetPath, purpose);
+  const canMoveSelected =
+    selectedDocumentIds.length > 0 &&
+    !movingSelected &&
+    normalizedMoveTarget.length > 0 &&
+    selectedDocuments.some((doc) => doc.folder_path !== normalizedMoveTarget);
+  const canQueueSelected = selectedDocumentIds.length > 0 && !queueingSelected;
+  const canDeleteSelected = selectedDocumentIds.length === 1 && !deletingSelected;
 
   async function loadDocuments(nextSelectedId?: string) {
     const requestFolder = normalizeFolderForPurpose(currentFolder, purpose);
@@ -89,6 +115,7 @@ export function DocumentsPage({
       });
       setTotalDocuments(data.total);
       setDocuments(data.documents);
+      setSelectedDocumentIds((current) => current.filter((id) => data.documents.some((doc) => doc.id === id)));
       const preferredId = nextSelectedId ?? selectedId;
       if (!data.documents.some((doc) => doc.id === preferredId)) setSelectedId(data.documents[0]?.id ?? null);
       if (nextSelectedId && data.documents.some((doc) => doc.id === nextSelectedId)) setSelectedId(nextSelectedId);
@@ -120,6 +147,8 @@ export function DocumentsPage({
     setNewFolderName("");
     setMessage("");
     setPage(1);
+    setSelectedDocumentIds([]);
+    setMoveTargetPath(`/${purpose}`);
   }, [purpose]);
 
   useEffect(() => {
@@ -137,6 +166,8 @@ export function DocumentsPage({
   useEffect(() => {
     setPage(1);
     setSelectedId(null);
+    setSelectedDocumentIds([]);
+    setMoveTargetPath(currentFolder);
   }, [currentFolder]);
 
   useEffect(() => {
@@ -199,11 +230,34 @@ export function DocumentsPage({
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("确认删除这条原始文件记录？")) return;
+    const doc = documents.find((item) => item.id === id) ?? (detail?.id === id ? detail : null);
+    const titleText = doc?.title || "这条原始文件";
+    const message =
+      doc?.status === "uploaded"
+        ? `确认删除「${titleText}」？该文件还没有被解析。`
+        : `确认删除「${titleText}」？该文件不是未解析状态，删除原始文件会连已经解析的知识、解析结果和相关解析任务一起删除。`;
+    if (!window.confirm(message)) return;
     await deleteDocument(id);
+    setMessage(`已删除「${titleText}」。`);
     setSelectedId(null);
+    setSelectedDocumentIds((current) => current.filter((selected) => selected !== id));
     await loadFolder();
     loadDocuments();
+  }
+
+  async function handleDeleteSelectedDocument() {
+    if (selectedDocumentIds.length !== 1) {
+      setMessage("暂时只支持选中单个文件删除，请只勾选一个原始文件。");
+      return;
+    }
+    setDeletingSelected(true);
+    try {
+      await handleDelete(selectedDocumentIds[0]);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "删除文件失败。");
+    } finally {
+      setDeletingSelected(false);
+    }
   }
 
   async function handleCreateFolder() {
@@ -248,6 +302,97 @@ export function DocumentsPage({
       await loadDocuments(moved.id);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "移动文件失败。");
+    }
+  }
+
+  function toggleDocumentSelection(id: string, checked: boolean) {
+    setSelectedDocumentIds((current) => {
+      if (checked) return [...new Set([...current, id])];
+      return current.filter((selected) => selected !== id);
+    });
+  }
+
+  function toggleAllVisibleDocuments(checked: boolean) {
+    if (checked) {
+      setSelectedDocumentIds((current) => [...new Set([...current, ...documents.map((doc) => doc.id)])]);
+      return;
+    }
+    setSelectedDocumentIds((current) => current.filter((id) => !documents.some((doc) => doc.id === id)));
+  }
+
+  async function handleMoveSelectedDocuments() {
+    if (!selectedDocumentIds.length) {
+      setMessage("请先选择要移动的文件。");
+      return;
+    }
+    const targetPath = normalizeTypedFolderPath(moveTargetPath, purpose);
+    if (!targetPath) {
+      setMessage("请输入目标文件夹路径。");
+      return;
+    }
+    const idsToMove = selectedDocuments.filter((doc) => doc.folder_path !== targetPath).map((doc) => doc.id);
+    if (!idsToMove.length) {
+      setMessage("选中的文件已经在目标路径中。");
+      return;
+    }
+    if (!window.confirm(`确认把 ${idsToMove.length} 个文件移动到 ${targetPath}？知识管理中的路径也会同步变化。`)) return;
+
+    setMovingSelected(true);
+    setMessage("");
+    try {
+      let movedCount = 0;
+      let latestMovedId: string | undefined;
+      for (const id of idsToMove) {
+        const moved = await moveDocument(id, targetPath);
+        latestMovedId = moved.id;
+        movedCount += 1;
+      }
+      setSelectedDocumentIds([]);
+      setMoveTargetPath(targetPath);
+      setMessage(`已移动 ${movedCount} 个文件到 ${targetPath}。`);
+      await loadFolder();
+      await loadDocuments(latestMovedId);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "移动选中文件失败。");
+    } finally {
+      setMovingSelected(false);
+    }
+  }
+
+  async function handleQueueSelectedDocuments() {
+    if (!selectedDocumentIds.length) {
+      setMessage("请先选择要添加至解析队列的文件。");
+      return;
+    }
+    const invalidDocuments = selectedDocuments.filter((doc) => doc.status !== "uploaded");
+    if (invalidDocuments.length) {
+      const invalidNames = invalidDocuments
+        .slice(0, 3)
+        .map((doc) => `「${doc.title}」是${documentStatusLabels[doc.status] ?? doc.status}`)
+        .join("、");
+      const suffix = invalidDocuments.length > 3 ? ` 等 ${invalidDocuments.length} 个文件` : "";
+      const text = `${invalidNames}${suffix}，不是未解析状态，不能添加至队列。请只选择未解析文件。`;
+      setMessage(text);
+      window.alert(text);
+      return;
+    }
+    if (!window.confirm(`确认把选中的 ${selectedDocumentIds.length} 个未解析文件添加至解析队列？`)) return;
+
+    setQueueingSelected(true);
+    setMessage("");
+    try {
+      const result = await createParseJobsBatch({
+        document_ids: selectedDocumentIds,
+        limit: selectedDocumentIds.length,
+        requested_by: "web"
+      });
+      setSelectedDocumentIds([]);
+      setMessage(`已把 ${result.queued} 个未解析文件添加至解析队列，等待 Qoder Work 领取。`);
+      await loadDocuments(result.document_ids[0] ?? selectedId ?? undefined);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "添加至解析队列失败。");
+    } finally {
+      setQueueingSelected(false);
     }
   }
 
@@ -296,26 +441,57 @@ export function DocumentsPage({
       <div className="documentLayout">
         <div className="listPane">
           <div className="listToolbar">
-            <div>
+            <div className="listToolbarMeta">
               <strong>{totalDocuments ? `${pageStart}-${pageEnd}` : "0"} / {totalDocuments}</strong>
-              <span>按更新时间倒序</span>
+              <span>{selectedDocumentIds.length ? `已选择 ${selectedDocumentIds.length} 个文件` : "按更新时间倒序"}</span>
             </div>
-            <label>
-              每页
-              <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
-                {PAGE_SIZE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="listToolbarActions">
+              <div className="bulkMoveControls">
+                <input
+                  className="compactPathInput"
+                  value={moveTargetPath}
+                  onChange={(event) => setMoveTargetPath(event.target.value)}
+                  placeholder={`目标路径，如 /${purpose}/2026`}
+                  title="目标文件夹路径"
+                />
+                <button className="compactButton" onClick={() => setMoveTargetPath(currentFolder)} title="填入当前路径">
+                  当前
+                </button>
+                <button className="compactButton primaryCompact" onClick={handleMoveSelectedDocuments} disabled={!canMoveSelected}>
+                  <MoveRight size={14} />
+                  {movingSelected ? "移动中" : "移动"}
+                </button>
+              </div>
+              <div className="selectionActionGroup">
+                <button className="compactButton" onClick={handleQueueSelectedDocuments} disabled={!canQueueSelected}>
+                  <ListPlus size={14} />
+                  {queueingSelected ? "添加中" : "入队"}
+                </button>
+                <button className="compactButton dangerText" onClick={handleDeleteSelectedDocument} disabled={!canDeleteSelected}>
+                  <Trash2 size={14} />
+                  {deletingSelected ? "删除中" : "删除"}
+                </button>
+              </div>
+              <label className="pageSizeControl">
+                每页
+                <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
+                  {PAGE_SIZE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
           {loading && <div className="loadingLine">正在刷新资料...</div>}
           <DocumentTable
             documents={documents}
             selectedId={selectedId}
+            selectedIds={selectedDocumentIds}
             onSelect={setSelectedId}
+            onToggleSelect={toggleDocumentSelection}
+            onToggleSelectAll={toggleAllVisibleDocuments}
             onReprocess={handleReprocess}
             onDelete={handleDelete}
           />
@@ -492,6 +668,7 @@ export function FolderNavigator({
                 key={crumb.path}
                 className={index === crumbs.length - 1 ? "breadcrumb active" : "breadcrumb"}
                 onClick={() => onEnter(crumb.path)}
+                title={crumb.path}
               >
                 {crumb.name}
               </button>
@@ -518,7 +695,7 @@ export function FolderNavigator({
       <div className="folderGrid">
         {folders.map((folder) => (
           <div key={folder.path} className="folderCard">
-            <button className="folderOpenButton" onClick={() => onEnter(folder.path)}>
+            <button className="folderOpenButton" onClick={() => onEnter(folder.path)} title={folder.path}>
               <Folder size={19} />
               <span>{folder.name}</span>
             </button>
@@ -551,6 +728,17 @@ function buildBreadcrumbs(currentFolder: string, purpose: string) {
 function normalizeFolderForPurpose(folder: string, purpose: string) {
   const root = `/${purpose}`;
   return folder === root || folder.startsWith(`${root}/`) ? folder : root;
+}
+
+function normalizeTypedFolderPath(value: string, purpose: string) {
+  const root = `/${purpose}`;
+  const trimmed = value.trim().replace(/\\/g, "/").replace(/\/+/g, "/");
+  if (!trimmed) return "";
+  if (trimmed === root || trimmed.startsWith(`${root}/`)) return trimmed;
+  const withoutSlash = trimmed.replace(/^\/+/, "");
+  if (!withoutSlash) return root;
+  if (withoutSlash === purpose || withoutSlash.startsWith(`${purpose}/`)) return `/${withoutSlash}`;
+  return `${root}/${withoutSlash}`;
 }
 
 function selectedFileLabel(files: File[]) {

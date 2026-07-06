@@ -1,7 +1,7 @@
 import { Activity, Database, KeyRound, Network, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AuditLog, ParseQueueItem } from "../api/client";
-import { cancelParseJob, fetchAuditLogs, fetchHealth, fetchParseQueue, processUnprocessed } from "../api/client";
+import { cancelParseJob, fetchAuditLogs, fetchDocuments, fetchHealth, fetchParseQueue, processUnprocessed } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
 
 export function AdminPage() {
@@ -10,11 +10,11 @@ export function AdminPage() {
   const [auditLoading, setAuditLoading] = useState(false);
   const [queueItems, setQueueItems] = useState<ParseQueueItem[]>([]);
   const [queueTotal, setQueueTotal] = useState(0);
+  const [unprocessed, setUnprocessed] = useState(0);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [health, setHealth] = useState<string>("检测中");
   const [message, setMessage] = useState("");
 
-  const unprocessed = queueItems.filter((item) => item.document_status === "uploaded").length;
   const queued = queueItems.filter((item) => item.document_status === "queued").length;
   const processing = queueItems.filter((item) => item.document_status === "processing").length;
   const failed = queueItems.filter((item) => item.document_status === "failed").length;
@@ -35,6 +35,9 @@ export function AdminPage() {
         setQueueItems([]);
         setQueueTotal(0);
       });
+    fetchDocuments({ status: "uploaded", limit: 1, offset: 0 })
+      .then((data) => setUnprocessed(data.total))
+      .catch(() => setUnprocessed(0));
   }
 
   useEffect(() => {
@@ -154,7 +157,7 @@ export function AdminPage() {
         <div className="queuePanelHeader">
           <div>
             <h3>解析队列</h3>
-            <p>展示所有尚未解析完成的文件；解析成功后会自动从这里移除。</p>
+            <p>只展示已经加入队列、正在解析或解析失败的文件；未解析文件需点击上方按钮后才会进入这里。</p>
           </div>
           <div className="queueActions">
             <button className="secondaryButton dangerText" onClick={cancelSelectedJobs} disabled={!canCancelSelected}>
@@ -197,7 +200,7 @@ export function AdminPage() {
                   <td>
                     <StatusBadge status={item.document_status} />
                   </td>
-                  <td>{item.job_id ? shortId(item.job_id) : "未入队"}</td>
+                  <td>{item.job_id ? shortId(item.job_id) : "-"}</td>
                   <td>{item.worker || "-"}</td>
                   <td>{new Date(item.job_updated_at || item.document_updated_at).toLocaleString("zh-CN")}</td>
                 </tr>

@@ -15,13 +15,19 @@ const formatLabels: Record<string, string> = {
 export function DocumentTable({
   documents,
   selectedId,
+  selectedIds,
   onSelect,
+  onToggleSelect,
+  onToggleSelectAll,
   onReprocess: _onReprocess,
   onDelete: _onDelete
 }: {
   documents: DocumentSummary[];
   selectedId: string | null;
+  selectedIds: string[];
   onSelect: (id: string) => void;
+  onToggleSelect: (id: string, checked: boolean) => void;
+  onToggleSelectAll: (checked: boolean) => void;
   onReprocess: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
@@ -34,11 +40,23 @@ export function DocumentTable({
     );
   }
 
+  const selectedIdSet = new Set(selectedIds);
+  const allVisibleSelected = documents.length > 0 && documents.every((doc) => selectedIdSet.has(doc.id));
+
   return (
     <div className="tableWrap">
       <table>
         <thead>
           <tr>
+            <th className="selectColumn">
+              <input
+                className="rowCheckbox"
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={(event) => onToggleSelectAll(event.target.checked)}
+                aria-label="选择本页全部文件"
+              />
+            </th>
             <th>资料</th>
             <th>作用</th>
             <th>格式</th>
@@ -50,6 +68,15 @@ export function DocumentTable({
         <tbody>
           {documents.map((doc) => (
             <tr key={doc.id} className={selectedId === doc.id ? "selectedRow" : ""} onClick={() => onSelect(doc.id)}>
+              <td className="selectColumn" onClick={(event) => event.stopPropagation()}>
+                <input
+                  className="rowCheckbox"
+                  type="checkbox"
+                  checked={selectedIdSet.has(doc.id)}
+                  onChange={(event) => onToggleSelect(doc.id, event.target.checked)}
+                  aria-label={`选择 ${doc.title}`}
+                />
+              </td>
               <td>
                 <div className="docTitle">{doc.title}</div>
                 <div className="docMeta">{doc.original_filename}</div>
