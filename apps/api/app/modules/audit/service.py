@@ -5,6 +5,7 @@ from app.db.session import db_session
 
 AUDITED_ACTIONS = {
     "upload",
+    "overwrite_upload",
     "delete",
     "create_parse_job",
     "create_parse_jobs_batch",

@@ -143,6 +143,15 @@ export async function fetchDocument(id: string) {
   return request<DocumentDetail>(`/api/v1/documents/${id}`);
 }
 
+export async function fetchDuplicateDocuments(filters: { purpose: string; folder: string; filename: string }) {
+  const params = new URLSearchParams({
+    purpose: filters.purpose,
+    folder: filters.folder,
+    filename: filters.filename
+  });
+  return request<{ documents: DocumentSummary[] }>(`/api/v1/documents/duplicates?${params.toString()}`);
+}
+
 export async function fetchContent(id: string) {
   const response = await fetch(`${API_BASE}/api/v1/documents/${id}/content?format=markdown`);
   if (!response.ok) throw new Error(await response.text());

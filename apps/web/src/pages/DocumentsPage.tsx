@@ -8,6 +8,7 @@ import {
   deleteFolder,
   fetchContent,
   fetchDocument,
+  fetchDuplicateDocuments,
   fetchDocuments,
   fetchFolder,
   moveDocument,
@@ -197,7 +198,27 @@ export function DocumentsPage({
     setMessage("");
     try {
       const uploadedIds: string[] = [];
+      const overwrittenFiles: string[] = [];
+      const skippedFiles: string[] = [];
       for (const selectedFile of files) {
+        const duplicateData = await fetchDuplicateDocuments({
+          purpose,
+          folder: currentFolder,
+          filename: selectedFile.name
+        });
+        const shouldOverwrite =
+          duplicateData.documents.length > 0
+            ? window.confirm(
+                `${selectedFile.name}文件已经存在，是否要覆盖？如果覆盖，原来已经解析的内容将被删除。${
+                  files.length > 1 ? "\n\n选择“取消”会跳过这个重复文件，并继续上传后面的文件。" : ""
+                }`
+              )
+            : false;
+        if (duplicateData.documents.length > 0 && !shouldOverwrite) {
+          skippedFiles.push(selectedFile.name);
+          continue;
+        }
+
         const body = new FormData();
         body.set("file", selectedFile);
         body.set("purpose", purpose);
@@ -206,12 +227,21 @@ export function DocumentsPage({
         body.set("uploader_name", uploader);
         body.set("project", project);
         body.set("source", source);
+        if (shouldOverwrite) body.set("overwrite", "true");
         const result = await uploadDocument(body);
         uploadedIds.push(result.id);
+        if (shouldOverwrite) overwrittenFiles.push(selectedFile.name);
+      }
+      if (!uploadedIds.length) {
+        setMessage(skippedFiles.length ? `已跳过 ${skippedFiles.length} 个重复文件，没有上传新文件。` : "没有上传新文件。");
+        return;
       }
       setFiles([]);
       setTitle("");
-      setMessage(`已上传 ${uploadedIds.length} 个文件到「${purpose}」，当前状态为未解析。`);
+      const summaryParts = [`已上传 ${uploadedIds.length} 个文件到「${purpose}」，当前状态为未解析。`];
+      if (overwrittenFiles.length) summaryParts.push(`覆盖 ${overwrittenFiles.length} 个重复文件。`);
+      if (skippedFiles.length) summaryParts.push(`跳过 ${skippedFiles.length} 个重复文件。`);
+      setMessage(summaryParts.join(""));
       onUploaded();
       await loadFolder();
       await loadDocuments(uploadedIds[uploadedIds.length - 1]);

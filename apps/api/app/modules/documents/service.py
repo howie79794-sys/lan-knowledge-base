@@ -168,10 +168,15 @@ def create_document(
     uploader_name: str | None,
     confidentiality: str,
     folder_path: str | None,
+    overwrite: bool = False,
 ) -> str:
     filename, ext, file_format = normalize_upload(file, purpose)
     canonical_purpose = normalize_purpose(purpose)
     normalized_folder = ensure_purpose_folder_path(canonical_purpose, folder_path)
+    duplicates = find_duplicate_documents(canonical_purpose, normalized_folder, filename)
+    if duplicates and not overwrite:
+        raise HTTPException(status_code=409, detail=f"{filename} 文件已经存在。")
+
     document_id = f"doc_{uuid4().hex}"
     now = utc_now()
     date_dir = datetime.now().strftime("%Y/%m")
@@ -230,7 +235,34 @@ def create_document(
             """,
             (document_id, canonical_purpose, source, project, confidentiality or "internal", uploader_name),
         )
+    if overwrite:
+        for duplicate in duplicates:
+            soft_delete_document(duplicate["id"])
     return document_id
+
+
+def find_duplicate_documents(purpose: str, folder_path: str | None, original_filename: str) -> list[dict]:
+    canonical_purpose = normalize_purpose(purpose)
+    normalized_folder = ensure_purpose_folder_path(canonical_purpose, folder_path)
+    filename = (original_filename or "").strip()
+    if not filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空。")
+    values = purpose_filter_values(canonical_purpose)
+    with db_session() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT d.*, m.purpose, m.uploader_name, m.confidentiality
+            FROM documents d
+            JOIN document_metadata m ON m.document_id = d.id
+            WHERE d.status != 'deleted'
+              AND d.folder_path = ?
+              AND d.original_filename = ?
+              AND m.purpose IN ({','.join('?' for _ in values)})
+            ORDER BY d.updated_at DESC
+            """,
+            [normalized_folder, filename, *values],
+        ).fetchall()
+    return [row_to_summary(row) for row in rows]
 
 
 def row_to_summary(row) -> dict:

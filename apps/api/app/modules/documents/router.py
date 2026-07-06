@@ -12,6 +12,7 @@ from app.modules.documents.service import (
     create_folder,
     create_document,
     delete_folder,
+    find_duplicate_documents,
     get_document,
     list_knowledge,
     list_folder,
@@ -45,9 +46,10 @@ def upload_document(
     project: str | None = Form(None),
     uploader_name: str | None = Form(None),
     confidentiality: str = Form("internal"),
+    overwrite: bool = Form(False),
 ):
-    document_id = create_document(file, purpose, title, source, project, uploader_name, confidentiality, folder_path)
-    write_audit("upload", document_id=document_id, actor=uploader_name, ip=request.client.host if request.client else None)
+    document_id = create_document(file, purpose, title, source, project, uploader_name, confidentiality, folder_path, overwrite)
+    write_audit("overwrite_upload" if overwrite else "upload", document_id=document_id, actor=uploader_name, ip=request.client.host if request.client else None)
     return {"id": document_id, "status": "uploaded"}
 
 
@@ -76,6 +78,11 @@ def documents(
 @router.get("/folders", response_model=FolderResponse)
 def folder(path: str = "/", purpose: str | None = None) -> FolderResponse:
     return FolderResponse(**list_folder(path, purpose=purpose))
+
+
+@router.get("/documents/duplicates")
+def document_duplicates(purpose: str, folder: str, filename: str):
+    return {"documents": find_duplicate_documents(purpose, folder, filename)}
 
 
 @router.post("/folders", response_model=FolderEntry)

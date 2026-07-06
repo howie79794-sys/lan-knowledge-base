@@ -1,7 +1,7 @@
 import { UploadCloud } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Categories } from "../api/client";
-import { uploadDocument } from "../api/client";
+import { fetchDuplicateDocuments, uploadDocument } from "../api/client";
 
 export function UploadPage({ categories, onUploaded }: { categories: Categories | null; onUploaded: (id: string) => void }) {
   const [file, setFile] = useState<File | null>(null);
@@ -23,17 +23,27 @@ export function UploadPage({ categories, onUploaded }: { categories: Categories 
       setMessage("请选择文件。");
       return;
     }
-    const body = new FormData();
-    body.set("file", file);
-    body.set("purpose", purpose);
-    body.set("folder_path", folderPath);
-    body.set("title", title);
-    body.set("uploader_name", uploader);
-    body.set("project", project);
-    body.set("source", source);
     setBusy(true);
     setMessage("");
     try {
+      const duplicateData = await fetchDuplicateDocuments({ purpose, folder: folderPath, filename: file.name });
+      const shouldOverwrite =
+        duplicateData.documents.length > 0
+          ? window.confirm(`${file.name}文件已经存在，是否要覆盖？如果覆盖，原来已经解析的内容将被删除。`)
+          : false;
+      if (duplicateData.documents.length > 0 && !shouldOverwrite) {
+        setMessage("已取消上传。");
+        return;
+      }
+      const body = new FormData();
+      body.set("file", file);
+      body.set("purpose", purpose);
+      body.set("folder_path", folderPath);
+      body.set("title", title);
+      body.set("uploader_name", uploader);
+      body.set("project", project);
+      body.set("source", source);
+      if (shouldOverwrite) body.set("overwrite", "true");
       const result = await uploadDocument(body);
       onUploaded(result.id);
       setFile(null);
