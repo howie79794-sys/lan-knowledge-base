@@ -69,6 +69,42 @@ export type ParseQueueItem = {
   job_updated_at?: string | null;
 };
 
+export type WikiPage = {
+  id: string;
+  page_type: "category_overview" | "document_summary";
+  title: string;
+  purpose?: string | null;
+  source_document_id?: string | null;
+  summary: string;
+  content: string;
+  keywords: string[];
+  status: string;
+  created_at: string;
+  updated_at: string;
+  page_url?: string;
+  content_url?: string;
+  raw_url?: string;
+};
+
+export type WikiCompileJob = {
+  id: string;
+  status: string;
+  purpose?: string | null;
+  total_documents: number;
+  compiled_pages: number;
+  error_message?: string | null;
+  created_at: string;
+  finished_at?: string | null;
+  updated_at: string;
+};
+
+export type WikiIndex = {
+  overview_pages: WikiPage[];
+  summary_counts: { purpose: string; count: number; updated_at: string }[];
+  latest_job?: WikiCompileJob | null;
+  stale_documents: { id: string; title: string; purpose: string; updated_at: string }[];
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -220,6 +256,15 @@ export async function fetchAuditLogs() {
 
 export async function clearOldAuditLogs(days = 7) {
   return request<{ deleted: number; cutoff: string }>(`/api/v1/audit-logs/older-than?days=${days}`, { method: "DELETE" });
+}
+
+export async function fetchWikiIndex() {
+  return request<WikiIndex>("/api/v1/wiki/index");
+}
+
+export async function compileWiki(purpose?: string) {
+  const suffix = purpose ? `?${new URLSearchParams({ purpose }).toString()}` : "";
+  return request<WikiCompileJob>(`/api/v1/wiki/compile${suffix}`, { method: "POST" });
 }
 
 export function rawUrl(id: string) {

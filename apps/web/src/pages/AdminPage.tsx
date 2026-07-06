@@ -1,7 +1,7 @@
-import { Activity, Database, KeyRound, Network, X } from "lucide-react";
+import { Activity, BookOpen, Database, KeyRound, Network, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { AuditLog, ParseQueueItem } from "../api/client";
-import { cancelParseJob, clearOldAuditLogs, fetchAuditLogs, fetchDocuments, fetchHealth, fetchParseQueue, processUnprocessed } from "../api/client";
+import type { AuditLog, ParseQueueItem, WikiIndex } from "../api/client";
+import { cancelParseJob, clearOldAuditLogs, compileWiki, fetchAuditLogs, fetchDocuments, fetchHealth, fetchParseQueue, fetchWikiIndex, processUnprocessed } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
 
 export function AdminPage() {
@@ -13,6 +13,8 @@ export function AdminPage() {
   const [queueTotal, setQueueTotal] = useState(0);
   const [unprocessed, setUnprocessed] = useState(0);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
+  const [wikiIndex, setWikiIndex] = useState<WikiIndex | null>(null);
+  const [compilingWiki, setCompilingWiki] = useState(false);
   const [health, setHealth] = useState<string>("检测中");
   const [message, setMessage] = useState("");
 
@@ -39,6 +41,9 @@ export function AdminPage() {
     fetchDocuments({ status: "uploaded", limit: 1, offset: 0 })
       .then((data) => setUnprocessed(data.total))
       .catch(() => setUnprocessed(0));
+    fetchWikiIndex()
+      .then(setWikiIndex)
+      .catch(() => setWikiIndex(null));
   }
 
   useEffect(() => {
@@ -53,6 +58,21 @@ export function AdminPage() {
       window.setTimeout(load, 1000);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "提交解析任务失败。");
+    }
+  }
+
+  async function runWikiCompile() {
+    setCompilingWiki(true);
+    setMessage("正在编译知识层...");
+    try {
+      const job = await compileWiki();
+      const index = await fetchWikiIndex();
+      setWikiIndex(index);
+      setMessage(`已编译知识层：处理 ${job.total_documents} 条已解析知识，生成/更新 ${job.compiled_pages} 个 Wiki 页面。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "编译知识层失败。");
+    } finally {
+      setCompilingWiki(false);
     }
   }
 
@@ -161,12 +181,34 @@ export function AdminPage() {
           <strong>/api/v1/parse-jobs/next</strong>
         </div>
       </div>
+      <div className="adminGrid compactAdminGrid">
+        <div className="adminTile">
+          <BookOpen size={22} />
+          <span>Wiki 总览页</span>
+          <strong>{wikiIndex?.overview_pages.length ?? 0}</strong>
+        </div>
+        <div className="adminTile">
+          <BookOpen size={22} />
+          <span>待更新知识</span>
+          <strong>{wikiIndex?.stale_documents.length ?? 0}</strong>
+        </div>
+      </div>
       <div className="processPanel">
         <div>
           <h3>创建解析任务</h3>
           <p>把所有“未解析”文件加入队列，不在网站进程里解析。Qoder Work 只领取“队列中”的文件，完成后文件会从下方队列移到知识管理。</p>
         </div>
         <button className="primaryButton" onClick={runProcessing}>创建未解析文件任务</button>
+      </div>
+      <div className="processPanel">
+        <div>
+          <h3>编译知识层</h3>
+          <p>把已解析 Markdown 编译成单文件摘要和分类总览页。Agent 应优先读取 Wiki 索引和上下文，再按需回源读取原文。</p>
+          {wikiIndex?.latest_job && <p>最近编译：{new Date(wikiIndex.latest_job.updated_at).toLocaleString("zh-CN")}，状态 {wikiIndex.latest_job.status}。</p>}
+        </div>
+        <button className="primaryButton" onClick={runWikiCompile} disabled={compilingWiki}>
+          {compilingWiki ? "编译中..." : "编译知识层"}
+        </button>
       </div>
       {message && <div className="notice">{message}</div>}
       <div className="queuePanel">
@@ -292,6 +334,7 @@ function auditActionLabel(action: string) {
     overwrite_upload: "覆盖上传",
     markdown_import: "导入 Markdown",
     overwrite_markdown_import: "覆盖导入 Markdown",
+    compile_wiki: "编译知识层",
     delete: "删除文件",
     create_folder: "新建文件夹",
     delete_folder: "删除文件夹",

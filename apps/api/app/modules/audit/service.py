@@ -8,6 +8,7 @@ AUDITED_ACTIONS = {
     "overwrite_upload",
     "markdown_import",
     "overwrite_markdown_import",
+    "compile_wiki",
     "delete",
     "create_parse_job",
     "create_parse_jobs_batch",

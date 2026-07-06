@@ -647,6 +647,7 @@ def soft_delete_document(document_id: str) -> None:
         conn.execute("DELETE FROM processed_artifacts WHERE document_id = ?", (document_id,))
         conn.execute("DELETE FROM parse_jobs WHERE document_id = ?", (document_id,))
         conn.execute("DELETE FROM conversion_jobs WHERE document_id = ?", (document_id,))
+        conn.execute("DELETE FROM wiki_pages WHERE source_document_id = ?", (document_id,))
         conn.execute(
             """
             UPDATE documents

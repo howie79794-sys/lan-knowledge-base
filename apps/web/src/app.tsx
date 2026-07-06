@@ -161,6 +161,8 @@ export function App() {
             </button>
           </div>
           <p>给其他 Agent 读取知识，给 Qoder Work 领取解析任务并回写结果。</p>
+          <code>/api/v1/wiki/index</code>
+          <code>/api/v1/wiki/context</code>
           <code>/api/v1/manifest</code>
           <code>/api/v1/parse-jobs/next</code>
           <div className="agentQuickActions">
@@ -213,11 +215,14 @@ export function App() {
                   </button>
                 </div>
                 <ol>
-                  <li>请求 <code>GET /api/v1/manifest</code> 获取所有 <code>ready</code> 知识清单。</li>
-                  <li>读取返回的 <code>content_url</code>，拿到 Markdown 正文。</li>
+                  <li>优先请求 <code>GET /api/v1/wiki/index</code> 获取知识总览。</li>
+                  <li>按问题请求 <code>GET /api/v1/wiki/context?query=...</code> 获取推荐阅读包。</li>
+                  <li>需要证据时再读取返回的 <code>content_url</code> 或 manifest 原文。</li>
                   <li>如配置了 <code>KB_AGENT_READ_TOKEN</code>，请求头带 <code>Authorization: Bearer TOKEN</code>。</li>
                 </ol>
-                <pre>{`GET ${window.location.origin}/api/v1/manifest
+                <pre>{`GET ${window.location.origin}/api/v1/wiki/index
+GET ${window.location.origin}/api/v1/wiki/context?query=项目管理
+GET ${window.location.origin}/api/v1/manifest
 GET ${window.location.origin}/api/v1/documents/{document_id}/content?format=markdown`}</pre>
               </section>
 
@@ -282,11 +287,28 @@ ${baseUrl}
   Authorization: Bearer <KB_AGENT_READ_TOKEN>
 - 如果未配置或仍为默认 change-me，本地读取接口通常不会强制鉴权。
 
-读取流程：
-1. 获取已解析知识清单：
+推荐读取流程：
+1. 优先读取 Wiki 编译层索引：
+   GET ${baseUrl}/api/v1/wiki/index
+
+   返回重点字段：
+   - overview_pages: 各知识分类的总览页
+   - summary_counts: 各分类已编译的单文件摘要数量
+   - stale_documents: 已解析但尚未编译或需要更新的文档
+
+2. 带着用户问题读取上下文包：
+   GET ${baseUrl}/api/v1/wiki/context?query=<用户问题或关键词>&limit=8
+
+   返回重点字段：
+   - pages: 推荐阅读的分类总览页和单文件摘要页
+   - sources: 可回源的原始资料，包含 content_url/raw_url
+
+3. 需要精确引用或证据时，再读取 sources[].content_url。
+
+4. 兜底获取全部已解析知识清单：
    GET ${baseUrl}/api/v1/manifest
 
-2. 从返回结果中选择 document：
+从 manifest 返回结果中选择 document：
    - id: 文档 ID
    - title: 知识标题
    - purpose: 知识分类
@@ -295,16 +317,23 @@ ${baseUrl}
    - content_url: Markdown 正文读取地址
    - raw_url: 原始文件下载地址
 
-3. 读取 Markdown 正文：
+读取 Markdown 正文：
    GET ${baseUrl}/api/v1/documents/{document_id}/content?format=markdown
    或直接 GET manifest 返回的 content_url。
 
 建议：
-- 优先使用 manifest 发现知识，不要猜 document_id。
+- 优先使用 wiki/index 和 wiki/context，不要一上来读取全部原文。
+- manifest 作为兜底清单使用，不要猜 document_id。
 - 只把 status=ready 的内容当作可引用知识。
 - 引用答案时保留 title、purpose、folder_path，方便追溯来源。
 
 示例：
+curl -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
+  "${baseUrl}/api/v1/wiki/index"
+
+curl -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
+  "${baseUrl}/api/v1/wiki/context?query=项目管理&limit=8"
+
 curl -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
   "${baseUrl}/api/v1/manifest"
 

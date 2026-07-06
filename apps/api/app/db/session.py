@@ -117,6 +117,33 @@ def init_db() -> None:
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS wiki_compile_jobs (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                purpose TEXT,
+                total_documents INTEGER NOT NULL DEFAULT 0,
+                compiled_pages INTEGER NOT NULL DEFAULT 0,
+                error_message TEXT,
+                created_at TEXT NOT NULL,
+                finished_at TEXT,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS wiki_pages (
+                id TEXT PRIMARY KEY,
+                page_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                purpose TEXT,
+                source_document_id TEXT,
+                summary TEXT NOT NULL,
+                content TEXT NOT NULL,
+                keywords TEXT,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(source_document_id) REFERENCES documents(id)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
             CREATE INDEX IF NOT EXISTS idx_documents_format ON documents(file_format);
             CREATE INDEX IF NOT EXISTS idx_metadata_purpose ON document_metadata(purpose);
@@ -125,6 +152,10 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_document_folders_purpose ON document_folders(purpose);
             CREATE INDEX IF NOT EXISTS idx_document_folders_path ON document_folders(path);
             CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+            CREATE INDEX IF NOT EXISTS idx_wiki_pages_type ON wiki_pages(page_type);
+            CREATE INDEX IF NOT EXISTS idx_wiki_pages_purpose ON wiki_pages(purpose);
+            CREATE INDEX IF NOT EXISTS idx_wiki_pages_source ON wiki_pages(source_document_id);
+            CREATE INDEX IF NOT EXISTS idx_wiki_compile_status ON wiki_compile_jobs(status);
             """
         )
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(documents)").fetchall()}
