@@ -404,6 +404,7 @@ def find_duplicate_documents(purpose: str, folder_path: str | None, original_fil
 
 
 def row_to_summary(row) -> dict:
+    keys = row.keys()
     return {
         "id": row["id"],
         "title": row["title"],
@@ -420,6 +421,8 @@ def row_to_summary(row) -> dict:
         "error_message": row["error_message"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "wiki_compiled": bool(row["wiki_compiled"]) if "wiki_compiled" in keys else False,
+        "wiki_updated_at": row["wiki_updated_at"] if "wiki_updated_at" in keys else None,
     }
 
 
@@ -466,9 +469,12 @@ def list_documents(
         ).fetchone()["count"]
         rows = conn.execute(
             f"""
-            SELECT d.*, m.purpose, m.uploader_name, m.confidentiality
+            SELECT d.*, m.purpose, m.uploader_name, m.confidentiality,
+                   CASE WHEN w.id IS NOT NULL AND w.updated_at >= d.updated_at AND w.compile_method = 'smart' THEN 1 ELSE 0 END AS wiki_compiled,
+                   w.updated_at AS wiki_updated_at
             FROM documents d
             JOIN document_metadata m ON m.document_id = d.id
+            LEFT JOIN wiki_pages w ON w.source_document_id = d.id AND w.page_type = 'document_summary'
             WHERE {where_clause}
             ORDER BY d.updated_at DESC
             LIMIT ? OFFSET ?
@@ -511,9 +517,12 @@ def list_folder(folder_path: str | None, purpose: str | None = None) -> dict:
             doc_params.extend(values)
         doc_rows = conn.execute(
             f"""
-            SELECT d.*, m.purpose, m.uploader_name, m.confidentiality
+            SELECT d.*, m.purpose, m.uploader_name, m.confidentiality,
+                   CASE WHEN w.id IS NOT NULL AND w.updated_at >= d.updated_at AND w.compile_method = 'smart' THEN 1 ELSE 0 END AS wiki_compiled,
+                   w.updated_at AS wiki_updated_at
             FROM documents d
             JOIN document_metadata m ON m.document_id = d.id
+            LEFT JOIN wiki_pages w ON w.source_document_id = d.id AND w.page_type = 'document_summary'
             WHERE d.status != 'deleted' AND d.folder_path = ?
             {purpose_clause}
             ORDER BY d.updated_at DESC
@@ -587,9 +596,12 @@ def list_knowledge(q: str | None = None, folder_path: str | None = None, purpose
     with db_session() as conn:
         rows = conn.execute(
             f"""
-            SELECT d.*, m.purpose, m.uploader_name, m.confidentiality
+            SELECT d.*, m.purpose, m.uploader_name, m.confidentiality,
+                   CASE WHEN w.id IS NOT NULL AND w.updated_at >= d.updated_at AND w.compile_method = 'smart' THEN 1 ELSE 0 END AS wiki_compiled,
+                   w.updated_at AS wiki_updated_at
             FROM documents d
             JOIN document_metadata m ON m.document_id = d.id
+            LEFT JOIN wiki_pages w ON w.source_document_id = d.id AND w.page_type = 'document_summary'
             WHERE {where_clause}
             ORDER BY d.updated_at DESC
             """,

@@ -15,6 +15,8 @@ class DocumentSummary(BaseModel):
     confidentiality: str
     content_excerpt: str | None = None
     error_message: str | None = None
+    wiki_compiled: bool = False
+    wiki_updated_at: str | None = None
     created_at: str
     updated_at: str
 

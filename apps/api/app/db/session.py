@@ -120,13 +120,21 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS wiki_compile_jobs (
                 id TEXT PRIMARY KEY,
                 status TEXT NOT NULL,
+                job_type TEXT NOT NULL DEFAULT 'batch_local',
+                source_document_id TEXT,
                 purpose TEXT,
                 total_documents INTEGER NOT NULL DEFAULT 0,
                 compiled_pages INTEGER NOT NULL DEFAULT 0,
+                worker TEXT,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                requested_by TEXT,
+                result_page_id TEXT,
                 error_message TEXT,
+                started_at TEXT,
                 created_at TEXT NOT NULL,
                 finished_at TEXT,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(source_document_id) REFERENCES documents(id)
             );
 
             CREATE TABLE IF NOT EXISTS wiki_pages (
@@ -138,6 +146,7 @@ def init_db() -> None:
                 summary TEXT NOT NULL,
                 content TEXT NOT NULL,
                 keywords TEXT,
+                compile_method TEXT NOT NULL DEFAULT 'local',
                 status TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -156,9 +165,27 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_wiki_pages_purpose ON wiki_pages(purpose);
             CREATE INDEX IF NOT EXISTS idx_wiki_pages_source ON wiki_pages(source_document_id);
             CREATE INDEX IF NOT EXISTS idx_wiki_compile_status ON wiki_compile_jobs(status);
+            CREATE INDEX IF NOT EXISTS idx_wiki_compile_source ON wiki_compile_jobs(source_document_id);
             """
         )
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(documents)").fetchall()}
         if "folder_path" not in columns:
             conn.execute("ALTER TABLE documents ADD COLUMN folder_path TEXT NOT NULL DEFAULT '/'")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_folder ON documents(folder_path)")
+        wiki_job_columns = {row["name"] for row in conn.execute("PRAGMA table_info(wiki_compile_jobs)").fetchall()}
+        wiki_job_additions = {
+            "job_type": "TEXT NOT NULL DEFAULT 'batch_local'",
+            "source_document_id": "TEXT",
+            "worker": "TEXT",
+            "attempts": "INTEGER NOT NULL DEFAULT 0",
+            "requested_by": "TEXT",
+            "result_page_id": "TEXT",
+            "started_at": "TEXT",
+        }
+        for name, definition in wiki_job_additions.items():
+            if name not in wiki_job_columns:
+                conn.execute(f"ALTER TABLE wiki_compile_jobs ADD COLUMN {name} {definition}")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_wiki_compile_source ON wiki_compile_jobs(source_document_id)")
+        wiki_page_columns = {row["name"] for row in conn.execute("PRAGMA table_info(wiki_pages)").fetchall()}
+        if "compile_method" not in wiki_page_columns:
+            conn.execute("ALTER TABLE wiki_pages ADD COLUMN compile_method TEXT NOT NULL DEFAULT 'local'")

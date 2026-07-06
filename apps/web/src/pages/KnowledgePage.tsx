@@ -139,6 +139,7 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
                     <th>格式</th>
                     <th>大小</th>
                     <th>状态</th>
+                    <th>已编译</th>
                     <th>更新时间</th>
                   </tr>
                 </thead>
@@ -156,6 +157,11 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
                       <td>{formatBytes(item.size_bytes)}</td>
                       <td>
                         <StatusBadge status={item.status} />
+                      </td>
+                      <td>
+                        <span className={item.wiki_compiled ? "compilePill compiled" : "compilePill"}>
+                          {item.wiki_compiled ? "是" : "否"}
+                        </span>
                       </td>
                       <td>{formatDate(item.updated_at)}</td>
                     </tr>

@@ -163,6 +163,7 @@ export function App() {
           <p>给其他 Agent 读取知识，给 Qoder Work 领取解析任务并回写结果。</p>
           <code>/api/v1/wiki/index</code>
           <code>/api/v1/wiki/context</code>
+          <code>/api/v1/wiki/compile-jobs/queue</code>
           <code>/api/v1/manifest</code>
           <code>/api/v1/parse-jobs/next</code>
           <div className="agentQuickActions">
@@ -243,11 +244,15 @@ GET ${window.location.origin}/api/v1/documents/{document_id}/content?format=mark
                   <li>使用 claim 返回的 <code>raw_url</code> 下载原文件。</li>
                   <li>解析成功后提交 <code>POST /api/v1/parse-jobs/{`{job_id}`}/complete</code>。</li>
                   <li>解析失败后提交 <code>POST /api/v1/parse-jobs/{`{job_id}`}/fail</code>。</li>
+                  <li>智能编译使用 <code>/api/v1/wiki/compile-jobs/queue</code>、<code>claim</code>、<code>complete</code>。</li>
                 </ol>
                 <pre>{`GET ${window.location.origin}/api/v1/parse-jobs/queue?limit=500
 POST ${window.location.origin}/api/v1/parse-jobs/claim
 POST ${window.location.origin}/api/v1/parse-jobs/{job_id}/complete
-POST ${window.location.origin}/api/v1/parse-jobs/{job_id}/fail`}</pre>
+POST ${window.location.origin}/api/v1/parse-jobs/{job_id}/fail
+GET ${window.location.origin}/api/v1/wiki/compile-jobs/queue?limit=500
+POST ${window.location.origin}/api/v1/wiki/compile-jobs/claim
+POST ${window.location.origin}/api/v1/wiki/compile-jobs/{job_id}/complete`}</pre>
               </section>
 
               <section className="agentGuideCard skillDownloadCard">
@@ -437,6 +442,43 @@ Body:
 - document status 更新为 failed
 - 网站后台解析队列显示错误信息
 
+七、智能编译 Wiki 知识层
+当网站后台创建“智能编译任务”后，Qoder Work 或其他 Agent 可领取已经解析完成的文档，生成更高质量的 Wiki 摘要页。
+
+1. 查看智能编译队列：
+   GET ${baseUrl}/api/v1/wiki/compile-jobs/queue?limit=500
+
+2. 让用户选择一个或多个 job_id 后领取：
+   POST ${baseUrl}/api/v1/wiki/compile-jobs/claim
+   Body:
+   {
+     "job_ids": ["wiki_job_xxx"],
+     "worker": "qoder-work"
+   }
+
+3. 读取 claim 返回的 content_url，生成：
+   - summary: 3-8 句高质量摘要
+   - content: 可直接作为 Wiki 页面读取的 Markdown
+   - keywords: 关键词数组
+
+4. 回写智能编译结果：
+   POST ${baseUrl}/api/v1/wiki/compile-jobs/{job_id}/complete
+   Body:
+   {
+     "summary": "这份材料的核心摘要...",
+     "content": "# Wiki 页面\\n\\n## 核心观点\\n...",
+     "keywords": ["项目", "验收", "风险"],
+     "worker": "qoder-work"
+   }
+
+5. 失败时：
+   POST ${baseUrl}/api/v1/wiki/compile-jobs/{job_id}/fail
+   Body:
+   {
+     "error_message": "失败原因",
+     "worker": "qoder-work"
+   }
+
 curl 示例：
 curl -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
   "${baseUrl}/api/v1/parse-jobs/queue?limit=500"
@@ -450,5 +492,13 @@ curl -X POST -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
   -H "Content-Type: application/json" \\
   -d '{"markdown":"# title","text":"title","metadata":{},"worker":"qoder-work"}' \\
   "${baseUrl}/api/v1/parse-jobs/{job_id}/complete"
+
+curl -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
+  "${baseUrl}/api/v1/wiki/compile-jobs/queue?limit=500"
+
+curl -X POST -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
+  -H "Content-Type: application/json" \\
+  -d '{"job_ids":["wiki_job_xxx"],"worker":"qoder-work"}' \\
+  "${baseUrl}/api/v1/wiki/compile-jobs/claim"
 `;
 }

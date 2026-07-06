@@ -28,6 +28,7 @@ def page_to_dict(row) -> dict:
         "summary": row["summary"],
         "content": row["content"],
         "keywords": split_keywords(row["keywords"]),
+        "compile_method": row["compile_method"],
         "status": row["status"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
@@ -97,14 +98,308 @@ def job_to_dict(row) -> dict:
     return {
         "id": row["id"],
         "status": row["status"],
+        "job_type": row["job_type"],
+        "source_document_id": row["source_document_id"],
         "purpose": display_purpose(row["purpose"]) if row["purpose"] else None,
         "total_documents": row["total_documents"],
         "compiled_pages": row["compiled_pages"],
+        "worker": row["worker"],
+        "attempts": row["attempts"],
+        "requested_by": row["requested_by"],
+        "result_page_id": row["result_page_id"],
         "error_message": row["error_message"],
+        "started_at": row["started_at"],
         "created_at": row["created_at"],
         "finished_at": row["finished_at"],
         "updated_at": row["updated_at"],
     }
+
+
+def create_smart_compile_jobs(
+    document_ids: list[str] | None = None,
+    purpose: str | None = None,
+    include_current: bool = False,
+    requested_by: str | None = None,
+    limit: int = 10000,
+) -> dict:
+    canonical_purpose = purpose if purpose in DOCUMENT_PURPOSES else None
+    if purpose and not canonical_purpose:
+        raise HTTPException(status_code=400, detail="知识分类不在允许范围内。")
+    safe_limit = min(max(limit, 1), 10000)
+    filters = ["d.status = 'ready'"]
+    params: list[object] = []
+    if document_ids:
+        unique_ids = list(dict.fromkeys(document_id for document_id in document_ids if document_id.strip()))
+        filters.append(f"d.id IN ({','.join('?' for _ in unique_ids)})")
+        params.extend(unique_ids)
+    if canonical_purpose:
+        values = purpose_filter_values(canonical_purpose)
+        filters.append(f"m.purpose IN ({','.join('?' for _ in values)})")
+        params.extend(values)
+    if not include_current:
+        filters.append("(w.id IS NULL OR w.updated_at < d.updated_at OR w.compile_method != 'smart')")
+    where_clause = " AND ".join(filters)
+    with db_session() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT d.id, m.purpose
+            FROM documents d
+            JOIN document_metadata m ON m.document_id = d.id
+            LEFT JOIN wiki_pages w ON w.source_document_id = d.id AND w.page_type = 'document_summary'
+            WHERE {where_clause}
+            ORDER BY d.updated_at DESC
+            LIMIT ?
+            """,
+            [*params, safe_limit],
+        ).fetchall()
+
+        created_job_ids: list[str] = []
+        queued_document_ids: list[str] = []
+        now = utc_now()
+        for row in rows:
+            existing = conn.execute(
+                """
+                SELECT id
+                FROM wiki_compile_jobs
+                WHERE job_type = 'smart_document'
+                  AND source_document_id = ?
+                  AND status IN ('queued', 'processing')
+                LIMIT 1
+                """,
+                (row["id"],),
+            ).fetchone()
+            if existing:
+                continue
+            job_id = f"wiki_job_{uuid4().hex}"
+            conn.execute(
+                """
+                INSERT INTO wiki_compile_jobs (
+                    id, status, job_type, source_document_id, purpose, total_documents,
+                    compiled_pages, attempts, requested_by, created_at, updated_at
+                )
+                VALUES (?, 'queued', 'smart_document', ?, ?, 1, 0, 0, ?, ?, ?)
+                """,
+                (job_id, row["id"], row["purpose"], requested_by, now, now),
+            )
+            created_job_ids.append(job_id)
+            queued_document_ids.append(row["id"])
+    return {
+        "queued": len(created_job_ids),
+        "job_ids": created_job_ids,
+        "document_ids": queued_document_ids,
+    }
+
+
+def list_smart_compile_queue(limit: int = 200, offset: int = 0) -> dict:
+    safe_limit = min(max(limit, 1), 500)
+    safe_offset = max(offset, 0)
+    with db_session() as conn:
+        total = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM wiki_compile_jobs
+            WHERE job_type = 'smart_document' AND status IN ('queued', 'processing', 'failed')
+            """
+        ).fetchone()["count"]
+        rows = conn.execute(
+            """
+            SELECT j.*, d.title, d.original_filename, d.file_format, d.folder_path,
+                   d.size_bytes, d.updated_at AS document_updated_at
+            FROM wiki_compile_jobs j
+            JOIN documents d ON d.id = j.source_document_id
+            WHERE j.job_type = 'smart_document'
+              AND j.status IN ('queued', 'processing', 'failed')
+            ORDER BY
+                CASE j.status
+                    WHEN 'processing' THEN 1
+                    WHEN 'queued' THEN 2
+                    WHEN 'failed' THEN 3
+                    ELSE 5
+                END,
+                j.updated_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (safe_limit, safe_offset),
+        ).fetchall()
+    return {"total": total, "items": [smart_job_to_queue_item(row) for row in rows]}
+
+
+def smart_job_to_queue_item(row) -> dict:
+    return {
+        **job_to_dict(row),
+        "document": {
+            "id": row["source_document_id"],
+            "title": row["title"],
+            "original_filename": row["original_filename"],
+            "file_format": row["file_format"],
+            "folder_path": row["folder_path"],
+            "purpose": display_purpose(row["purpose"]) if row["purpose"] else None,
+            "size_bytes": row["size_bytes"],
+            "updated_at": row["document_updated_at"],
+        },
+    }
+
+
+def claim_next_smart_compile_jobs(limit: int, worker: str | None, request) -> list[dict]:
+    safe_limit = min(max(limit, 1), 20)
+    now = utc_now()
+    worker_name = worker or "qoder-work"
+    with db_session() as conn:
+        rows = conn.execute(
+            """
+            SELECT j.*, d.title, d.original_filename, d.file_format, d.folder_path,
+                   d.size_bytes, d.updated_at AS document_updated_at
+            FROM wiki_compile_jobs j
+            JOIN documents d ON d.id = j.source_document_id
+            WHERE j.job_type = 'smart_document' AND j.status = 'queued' AND d.status = 'ready'
+            ORDER BY j.created_at ASC
+            LIMIT ?
+            """,
+            (safe_limit,),
+        ).fetchall()
+        job_ids = [row["id"] for row in rows]
+        if job_ids:
+            conn.execute(
+                f"""
+                UPDATE wiki_compile_jobs
+                SET status = 'processing', worker = ?, attempts = attempts + 1,
+                    started_at = COALESCE(started_at, ?), updated_at = ?
+                WHERE id IN ({','.join('?' for _ in job_ids)})
+                """,
+                [worker_name, now, now, *job_ids],
+            )
+    return [smart_job_to_work_item(row, worker_name, request, now) for row in rows]
+
+
+def claim_selected_smart_compile_jobs(job_ids: list[str], worker: str | None, request) -> list[dict]:
+    unique_job_ids = list(dict.fromkeys(job_id for job_id in job_ids if job_id.strip()))
+    if not unique_job_ids:
+        raise HTTPException(status_code=400, detail="请选择要领取的智能编译任务。")
+    if len(unique_job_ids) > 20:
+        raise HTTPException(status_code=400, detail="一次最多领取 20 个智能编译任务。")
+    placeholders = ",".join("?" for _ in unique_job_ids)
+    now = utc_now()
+    worker_name = worker or "qoder-work"
+    with db_session() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT j.*, d.title, d.original_filename, d.file_format, d.folder_path,
+                   d.size_bytes, d.updated_at AS document_updated_at, d.status AS document_status
+            FROM wiki_compile_jobs j
+            JOIN documents d ON d.id = j.source_document_id
+            WHERE j.id IN ({placeholders})
+            ORDER BY j.created_at ASC
+            """,
+            unique_job_ids,
+        ).fetchall()
+        found_ids = {row["id"] for row in rows}
+        missing = [job_id for job_id in unique_job_ids if job_id not in found_ids]
+        if missing:
+            raise HTTPException(status_code=404, detail=f"智能编译任务不存在：{', '.join(missing)}")
+        invalid = [row for row in rows if row["status"] != "queued" or row["document_status"] != "ready"]
+        if invalid:
+            text = "、".join(f"{row['id']}({row['status']})" for row in invalid[:5])
+            raise HTTPException(status_code=400, detail=f"只能领取队列中的智能编译任务：{text}")
+        conn.execute(
+            f"""
+            UPDATE wiki_compile_jobs
+            SET status = 'processing', worker = ?, attempts = attempts + 1,
+                started_at = COALESCE(started_at, ?), updated_at = ?
+            WHERE id IN ({placeholders})
+            """,
+            [worker_name, now, now, *unique_job_ids],
+        )
+    return [smart_job_to_work_item(row, worker_name, request, now) for row in rows]
+
+
+def smart_job_to_work_item(row, worker_name: str, request, now: str) -> dict:
+    document_id = row["source_document_id"]
+    return {
+        **smart_job_to_queue_item(
+            {
+                **dict(row),
+                "status": "processing",
+                "worker": worker_name,
+                "attempts": row["attempts"] + 1,
+                "started_at": row["started_at"] or now,
+                "updated_at": now,
+            }
+        ),
+        "content_url": str(request.url_for("document_content", document_id=document_id)) + "?format=markdown",
+        "raw_url": str(request.url_for("download_raw", document_id=document_id)),
+        "instructions": "读取 content_url，生成高质量 summary、content、keywords 后提交 complete。",
+    }
+
+
+def complete_smart_compile_job(job_id: str, summary: str, content: str | None, keywords: list[str] | None, worker: str | None) -> dict:
+    with db_session() as conn:
+        job = conn.execute("SELECT * FROM wiki_compile_jobs WHERE id = ?", (job_id,)).fetchone()
+    if not job:
+        raise HTTPException(status_code=404, detail="智能编译任务不存在。")
+    if job["job_type"] != "smart_document":
+        raise HTTPException(status_code=400, detail="当前任务不是单文件智能编译任务。")
+    if job["status"] not in {"queued", "processing", "failed"}:
+        raise HTTPException(status_code=400, detail="当前智能编译任务状态不能提交结果。")
+    if not summary.strip():
+        raise HTTPException(status_code=400, detail="summary 不能为空。")
+
+    doc = get_ready_document_for_wiki(job["source_document_id"])
+    markdown = read_document_markdown(doc["id"])
+    page = upsert_document_summary_page_from_agent(
+        doc,
+        summary=summary.strip(),
+        content=(content or "").strip(),
+        keywords=keywords or extract_keywords(markdown, doc["title"], doc["purpose"]),
+    )
+    refresh_category_overview(doc["purpose"])
+    now = utc_now()
+    with db_session() as conn:
+        conn.execute(
+            """
+            UPDATE wiki_compile_jobs
+            SET status = 'succeeded', worker = COALESCE(?, worker), compiled_pages = 1,
+                result_page_id = ?, error_message = NULL, finished_at = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (worker, page["id"], now, now, job_id),
+        )
+        row = conn.execute("SELECT * FROM wiki_compile_jobs WHERE id = ?", (job_id,)).fetchone()
+    return job_to_dict(row)
+
+
+def fail_smart_compile_job(job_id: str, error_message: str, worker: str | None) -> dict:
+    with db_session() as conn:
+        job = conn.execute("SELECT * FROM wiki_compile_jobs WHERE id = ?", (job_id,)).fetchone()
+        if not job:
+            raise HTTPException(status_code=404, detail="智能编译任务不存在。")
+        now = utc_now()
+        conn.execute(
+            """
+            UPDATE wiki_compile_jobs
+            SET status = 'failed', worker = COALESCE(?, worker), error_message = ?,
+                finished_at = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (worker, error_message, now, now, job_id),
+        )
+        row = conn.execute("SELECT * FROM wiki_compile_jobs WHERE id = ?", (job_id,)).fetchone()
+    return job_to_dict(row)
+
+
+def get_ready_document_for_wiki(document_id: str) -> dict:
+    with db_session() as conn:
+        row = conn.execute(
+            """
+            SELECT d.*, m.purpose, m.uploader_name, m.confidentiality
+            FROM documents d
+            JOIN document_metadata m ON m.document_id = d.id
+            WHERE d.id = ? AND d.status = 'ready'
+            """,
+            (document_id,),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="已解析文档不存在。")
+    return dict(row)
 
 
 def list_ready_documents(purpose: str | None = None) -> list[dict]:
@@ -166,9 +461,9 @@ def upsert_document_summary_page(doc: dict, summary: str, markdown: str, keyword
             """
             INSERT OR REPLACE INTO wiki_pages (
                 id, page_type, title, purpose, source_document_id, summary, content,
-                keywords, status, created_at, updated_at
+                keywords, compile_method, status, created_at, updated_at
             )
-            VALUES (?, 'document_summary', ?, ?, ?, ?, ?, ?, 'ready', ?, ?)
+            VALUES (?, 'document_summary', ?, ?, ?, ?, ?, ?, 'local', 'ready', ?, ?)
             """,
             (
                 page_id,
@@ -184,6 +479,79 @@ def upsert_document_summary_page(doc: dict, summary: str, markdown: str, keyword
         )
         row = conn.execute("SELECT * FROM wiki_pages WHERE id = ?", (page_id,)).fetchone()
     return page_to_dict(row)
+
+
+def upsert_document_summary_page_from_agent(doc: dict, summary: str, content: str, keywords: list[str]) -> dict:
+    page_id = f"wiki_doc_{doc['id']}"
+    now = utc_now()
+    clean_keywords = [keyword.strip() for keyword in keywords if keyword.strip()][:24]
+    wiki_content = content or "\n".join(
+        [
+            f"# {doc['title']}",
+            "",
+            "## 核心摘要",
+            summary,
+            "",
+            "## 来源信息",
+            f"- 原始文件：{doc['original_filename']}",
+            f"- 知识分类：{display_purpose(doc['purpose'])}",
+            f"- 知识路径：{doc['folder_path']}",
+            f"- 原文 ID：{doc['id']}",
+            "",
+            "## 关键词",
+            ", ".join(clean_keywords[:12]) if clean_keywords else "暂无",
+        ]
+    ).strip()
+    with db_session() as conn:
+        existing = conn.execute("SELECT created_at FROM wiki_pages WHERE id = ?", (page_id,)).fetchone()
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO wiki_pages (
+                id, page_type, title, purpose, source_document_id, summary, content,
+                keywords, compile_method, status, created_at, updated_at
+            )
+            VALUES (?, 'document_summary', ?, ?, ?, ?, ?, ?, 'smart', 'ready', ?, ?)
+            """,
+            (
+                page_id,
+                doc["title"],
+                doc["purpose"],
+                doc["id"],
+                summary,
+                wiki_content,
+                ",".join(clean_keywords),
+                existing["created_at"] if existing else now,
+                now,
+            ),
+        )
+        row = conn.execute("SELECT * FROM wiki_pages WHERE id = ?", (page_id,)).fetchone()
+    return page_to_dict(row)
+
+
+def refresh_category_overview(purpose: str) -> dict | None:
+    with db_session() as conn:
+        rows = conn.execute(
+            """
+            SELECT d.id, d.title, d.original_filename, d.folder_path, d.updated_at,
+                   m.purpose, w.summary, w.keywords
+            FROM documents d
+            JOIN document_metadata m ON m.document_id = d.id
+            JOIN wiki_pages w ON w.source_document_id = d.id AND w.page_type = 'document_summary'
+            WHERE d.status = 'ready' AND m.purpose = ?
+            ORDER BY d.updated_at DESC
+            """,
+            (purpose,),
+        ).fetchall()
+    if not rows:
+        return None
+    docs = [
+        {
+            **dict(row),
+            "keywords": split_keywords(row["keywords"]),
+        }
+        for row in rows
+    ]
+    return upsert_category_overview_page(purpose, docs)
 
 
 def upsert_category_overview_page(purpose: str, documents: list[dict]) -> dict:
@@ -215,9 +583,9 @@ def upsert_category_overview_page(purpose: str, documents: list[dict]) -> dict:
             """
             INSERT OR REPLACE INTO wiki_pages (
                 id, page_type, title, purpose, source_document_id, summary, content,
-                keywords, status, created_at, updated_at
+                keywords, compile_method, status, created_at, updated_at
             )
-            VALUES (?, 'category_overview', ?, ?, NULL, ?, ?, ?, 'ready', ?, ?)
+            VALUES (?, 'category_overview', ?, ?, NULL, ?, ?, ?, 'local', 'ready', ?, ?)
             """,
             (
                 page_id,
@@ -265,7 +633,7 @@ def wiki_index() -> dict:
             FROM documents d
             JOIN document_metadata m ON m.document_id = d.id
             LEFT JOIN wiki_pages w ON w.source_document_id = d.id AND w.page_type = 'document_summary'
-            WHERE d.status = 'ready' AND (w.id IS NULL OR w.updated_at < d.updated_at)
+            WHERE d.status = 'ready' AND (w.id IS NULL OR w.updated_at < d.updated_at OR w.compile_method != 'smart')
             ORDER BY d.updated_at DESC
             LIMIT 100
             """

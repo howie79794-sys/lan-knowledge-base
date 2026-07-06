@@ -749,12 +749,12 @@ input {
 }
 
 .knowledgeTable {
-  min-width: 760px;
+  min-width: 820px;
 }
 
 .knowledgeTable th:first-child,
 .knowledgeTable td:first-child {
-  width: 42%;
+  width: 36%;
 }
 
 .knowledgeTable th:nth-child(2),
@@ -776,6 +776,11 @@ input {
 
 .knowledgeTable th:nth-child(6),
 .knowledgeTable td:nth-child(6) {
+  width: 82px;
+}
+
+.knowledgeTable th:nth-child(7),
+.knowledgeTable td:nth-child(7) {
   width: 116px;
 }
 
@@ -895,6 +900,7 @@ tr:hover,
 }
 
 .formatPill,
+.compilePill,
 .status {
   display: inline-flex;
   align-items: center;
@@ -911,6 +917,16 @@ tr:hover,
 .formatPill {
   background: var(--surface-strong);
   color: var(--ink-2);
+}
+
+.compilePill {
+  background: var(--surface-strong);
+  color: var(--ink-2);
+}
+
+.compilePill.compiled {
+  background: var(--green-soft);
+  color: var(--green);
 }
 
 .status-ready {

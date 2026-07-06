@@ -12,6 +12,8 @@ export type DocumentSummary = {
   confidentiality: string;
   content_excerpt?: string | null;
   error_message?: string | null;
+  wiki_compiled?: boolean;
+  wiki_updated_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -78,6 +80,7 @@ export type WikiPage = {
   summary: string;
   content: string;
   keywords: string[];
+  compile_method?: "local" | "smart";
   status: string;
   created_at: string;
   updated_at: string;
@@ -89,13 +92,33 @@ export type WikiPage = {
 export type WikiCompileJob = {
   id: string;
   status: string;
+  job_type?: string;
+  source_document_id?: string | null;
   purpose?: string | null;
   total_documents: number;
   compiled_pages: number;
+  worker?: string | null;
+  attempts?: number | null;
+  requested_by?: string | null;
+  result_page_id?: string | null;
   error_message?: string | null;
+  started_at?: string | null;
   created_at: string;
   finished_at?: string | null;
   updated_at: string;
+};
+
+export type WikiCompileQueueItem = WikiCompileJob & {
+  document: {
+    id: string;
+    title: string;
+    original_filename: string;
+    file_format: string;
+    folder_path: string;
+    purpose?: string | null;
+    size_bytes: number;
+    updated_at: string;
+  };
 };
 
 export type WikiIndex = {
@@ -265,6 +288,24 @@ export async function fetchWikiIndex() {
 export async function compileWiki(purpose?: string) {
   const suffix = purpose ? `?${new URLSearchParams({ purpose }).toString()}` : "";
   return request<WikiCompileJob>(`/api/v1/wiki/compile${suffix}`, { method: "POST" });
+}
+
+export async function createWikiCompileJobs(payload: {
+  document_ids?: string[];
+  purpose?: string;
+  include_current?: boolean;
+  requested_by?: string;
+  limit?: number;
+}) {
+  return request<{ queued: number; job_ids: string[]; document_ids: string[] }>("/api/v1/wiki/compile-jobs/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function fetchWikiCompileQueue() {
+  return request<{ total: number; items: WikiCompileQueueItem[] }>("/api/v1/wiki/compile-jobs/queue?limit=500");
 }
 
 export function rawUrl(id: string) {

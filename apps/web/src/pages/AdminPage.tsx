@@ -1,7 +1,7 @@
 import { Activity, BookOpen, Database, KeyRound, Network, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { AuditLog, ParseQueueItem, WikiIndex } from "../api/client";
-import { cancelParseJob, clearOldAuditLogs, compileWiki, fetchAuditLogs, fetchDocuments, fetchHealth, fetchParseQueue, fetchWikiIndex, processUnprocessed } from "../api/client";
+import type { AuditLog, ParseQueueItem, WikiCompileQueueItem, WikiIndex } from "../api/client";
+import { cancelParseJob, clearOldAuditLogs, compileWiki, createWikiCompileJobs, fetchAuditLogs, fetchDocuments, fetchHealth, fetchParseQueue, fetchWikiCompileQueue, fetchWikiIndex, processUnprocessed } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
 
 export function AdminPage() {
@@ -14,13 +14,18 @@ export function AdminPage() {
   const [unprocessed, setUnprocessed] = useState(0);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [wikiIndex, setWikiIndex] = useState<WikiIndex | null>(null);
+  const [wikiQueueItems, setWikiQueueItems] = useState<WikiCompileQueueItem[]>([]);
+  const [wikiQueueTotal, setWikiQueueTotal] = useState(0);
   const [compilingWiki, setCompilingWiki] = useState(false);
+  const [creatingWikiJobs, setCreatingWikiJobs] = useState(false);
   const [health, setHealth] = useState<string>("检测中");
   const [message, setMessage] = useState("");
 
   const queued = queueItems.filter((item) => item.document_status === "queued").length;
   const processing = queueItems.filter((item) => item.document_status === "processing").length;
   const failed = queueItems.filter((item) => item.document_status === "failed").length;
+  const wikiQueued = wikiQueueItems.filter((item) => item.status === "queued").length;
+  const wikiProcessing = wikiQueueItems.filter((item) => item.status === "processing").length;
   const selectedJobs = queueItems.filter((item) => item.job_id && selectedJobIds.includes(item.job_id));
   const canCancelSelected = selectedJobs.length > 0 && selectedJobs.every((item) => item.document_status === "queued" && item.job_id);
 
@@ -44,6 +49,15 @@ export function AdminPage() {
     fetchWikiIndex()
       .then(setWikiIndex)
       .catch(() => setWikiIndex(null));
+    fetchWikiCompileQueue()
+      .then((data) => {
+        setWikiQueueItems(data.items);
+        setWikiQueueTotal(data.total);
+      })
+      .catch(() => {
+        setWikiQueueItems([]);
+        setWikiQueueTotal(0);
+      });
   }
 
   useEffect(() => {
@@ -73,6 +87,20 @@ export function AdminPage() {
       setMessage(error instanceof Error ? error.message : "编译知识层失败。");
     } finally {
       setCompilingWiki(false);
+    }
+  }
+
+  async function createSmartWikiJobs() {
+    setCreatingWikiJobs(true);
+    setMessage("正在创建智能编译任务...");
+    try {
+      const result = await createWikiCompileJobs({ include_current: false, requested_by: "web" });
+      setMessage(`已创建 ${result.queued} 个智能编译任务，Qoder Work 或其他 Agent 可通过接口领取。`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "创建智能编译任务失败。");
+    } finally {
+      setCreatingWikiJobs(false);
     }
   }
 
@@ -192,6 +220,16 @@ export function AdminPage() {
           <span>待更新知识</span>
           <strong>{wikiIndex?.stale_documents.length ?? 0}</strong>
         </div>
+        <div className="adminTile">
+          <BookOpen size={22} />
+          <span>智能编译队列</span>
+          <strong>{wikiQueued}</strong>
+        </div>
+        <div className="adminTile">
+          <BookOpen size={22} />
+          <span>智能编译中</span>
+          <strong>{wikiProcessing}</strong>
+        </div>
       </div>
       <div className="processPanel">
         <div>
@@ -206,9 +244,14 @@ export function AdminPage() {
           <p>把已解析 Markdown 编译成单文件摘要和分类总览页。Agent 应优先读取 Wiki 索引和上下文，再按需回源读取原文。</p>
           {wikiIndex?.latest_job && <p>最近编译：{new Date(wikiIndex.latest_job.updated_at).toLocaleString("zh-CN")}，状态 {wikiIndex.latest_job.status}。</p>}
         </div>
-        <button className="primaryButton" onClick={runWikiCompile} disabled={compilingWiki}>
-          {compilingWiki ? "编译中..." : "编译知识层"}
-        </button>
+        <div className="queueActions">
+          <button className="secondaryButton" onClick={createSmartWikiJobs} disabled={creatingWikiJobs}>
+            {creatingWikiJobs ? "创建中..." : "创建智能编译任务"}
+          </button>
+          <button className="primaryButton" onClick={runWikiCompile} disabled={compilingWiki}>
+            {compilingWiki ? "编译中..." : "本地快速编译"}
+          </button>
+        </div>
       </div>
       {message && <div className="notice">{message}</div>}
       <div className="queuePanel">
@@ -273,6 +316,53 @@ export function AdminPage() {
         </div>
         {queueTotal > queueItems.length && <div className="queueFootnote">当前只显示前 {queueItems.length} 条，共 {queueTotal} 条。</div>}
       </div>
+      <div className="queuePanel">
+        <div className="queuePanelHeader">
+          <div>
+            <h3>智能编译队列</h3>
+            <p>展示等待 Qoder Work 或其他 Agent 领取的 Wiki 智能编译任务；完成后知识管理列表会显示已编译。</p>
+          </div>
+          <div className="queueActions">
+            <button className="secondaryButton" onClick={load}>刷新队列</button>
+          </div>
+        </div>
+        <div className="tableWrap">
+          <table>
+            <thead>
+              <tr>
+                <th>文件</th>
+                <th>类型</th>
+                <th>状态</th>
+                <th>任务</th>
+                <th>Worker</th>
+                <th>更新时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              {wikiQueueItems.map((item) => (
+                <tr key={item.id}>
+                  <td>
+                    <div className="docTitle">{item.document.title}</div>
+                    <div className="docMeta">{item.document.original_filename}</div>
+                    {item.error_message && <div className="queueError">{item.error_message}</div>}
+                  </td>
+                  <td>{item.document.purpose || item.purpose || "-"}</td>
+                  <td>{wikiJobStatusLabel(item.status)}</td>
+                  <td>{shortId(item.id)}</td>
+                  <td>{item.worker || "-"}</td>
+                  <td>{new Date(item.updated_at).toLocaleString("zh-CN")}</td>
+                </tr>
+              ))}
+              {!wikiQueueItems.length && (
+                <tr>
+                  <td colSpan={6}>当前没有待智能编译、编译中或失败的任务。</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {wikiQueueTotal > wikiQueueItems.length && <div className="queueFootnote">当前只显示前 {wikiQueueItems.length} 条，共 {wikiQueueTotal} 条。</div>}
+      </div>
       {showAudit && (
         <div className="modalBackdrop" role="dialog" aria-modal="true" aria-label="最近操作日志">
           <div className="auditModal">
@@ -328,6 +418,16 @@ function shortId(value: string) {
   return value.length > 14 ? `${value.slice(0, 10)}...` : value;
 }
 
+function wikiJobStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    queued: "队列中",
+    processing: "编译中",
+    failed: "编译失败",
+    succeeded: "已完成"
+  };
+  return labels[status] ?? status;
+}
+
 function auditActionLabel(action: string) {
   const labels: Record<string, string> = {
     upload: "上传文件",
@@ -335,6 +435,10 @@ function auditActionLabel(action: string) {
     markdown_import: "导入 Markdown",
     overwrite_markdown_import: "覆盖导入 Markdown",
     compile_wiki: "编译知识层",
+    create_wiki_compile_jobs: "创建智能编译任务",
+    claim_wiki_compile_job: "领取智能编译任务",
+    complete_wiki_compile_job: "智能编译完成",
+    fail_wiki_compile_job: "智能编译失败",
     delete: "删除文件",
     create_folder: "新建文件夹",
     delete_folder: "删除文件夹",

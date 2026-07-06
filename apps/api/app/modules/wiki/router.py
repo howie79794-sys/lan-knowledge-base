@@ -1,12 +1,59 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Header, HTTPException, Request
+from pydantic import BaseModel, Field
 
+from app.core.config import settings
 from app.modules.audit.service import write_audit
-from app.modules.wiki.service import compile_wiki, get_wiki_page, wiki_context, wiki_index
+from app.modules.wiki.service import (
+    claim_next_smart_compile_jobs,
+    claim_selected_smart_compile_jobs,
+    compile_wiki,
+    complete_smart_compile_job,
+    create_smart_compile_jobs,
+    fail_smart_compile_job,
+    get_wiki_page,
+    list_smart_compile_queue,
+    wiki_context,
+    wiki_index,
+)
 
 
 router = APIRouter(prefix="/api/v1/wiki", tags=["wiki"])
+
+
+class CreateSmartCompileJobsRequest(BaseModel):
+    document_ids: list[str] | None = None
+    purpose: str | None = None
+    include_current: bool = False
+    requested_by: str | None = "web"
+    limit: int = Field(default=10000, ge=1, le=10000)
+
+
+class ClaimSmartCompileJobsRequest(BaseModel):
+    job_ids: list[str]
+    worker: str | None = "qoder-work"
+
+
+class CompleteSmartCompileJobRequest(BaseModel):
+    summary: str
+    content: str | None = None
+    keywords: list[str] | None = None
+    worker: str | None = "qoder-work"
+
+
+class FailSmartCompileJobRequest(BaseModel):
+    error_message: str
+    worker: str | None = "qoder-work"
+
+
+def verify_worker_token(authorization: str | None) -> None:
+    token = settings.agent_read_token
+    if not token or token == "change-me":
+        return
+    expected = f"Bearer {token}"
+    if authorization != expected:
+        raise HTTPException(status_code=401, detail="Qoder Work Token 不正确。")
 
 
 @router.post("/compile")
@@ -17,6 +64,62 @@ def compile_wiki_route(request: Request, purpose: str | None = None):
         ip=request.client.host if request.client else None,
         message=f"pages={job['compiled_pages']},docs={job['total_documents']}",
     )
+    return job
+
+
+@router.post("/compile-jobs/batch")
+def create_smart_compile_jobs_route(payload: CreateSmartCompileJobsRequest, request: Request):
+    result = create_smart_compile_jobs(
+        document_ids=payload.document_ids,
+        purpose=payload.purpose,
+        include_current=payload.include_current,
+        requested_by=payload.requested_by or "web",
+        limit=payload.limit,
+    )
+    if result["queued"]:
+        write_audit("create_wiki_compile_jobs", ip=request.client.host if request.client else None, message=f"queued={result['queued']}")
+    return result
+
+
+@router.get("/compile-jobs/queue")
+def smart_compile_queue(limit: int = 200, offset: int = 0):
+    return list_smart_compile_queue(limit=limit, offset=offset)
+
+
+@router.get("/compile-jobs/next")
+def claim_next_smart_compile_jobs_route(
+    request: Request,
+    limit: int = 5,
+    worker: str | None = "qoder-work",
+    authorization: str | None = Header(default=None),
+):
+    verify_worker_token(authorization)
+    jobs = claim_next_smart_compile_jobs(limit=limit, worker=worker, request=request)
+    return {"jobs": jobs}
+
+
+@router.post("/compile-jobs/claim")
+def claim_selected_smart_compile_jobs_route(payload: ClaimSmartCompileJobsRequest, request: Request, authorization: str | None = Header(default=None)):
+    verify_worker_token(authorization)
+    jobs = claim_selected_smart_compile_jobs(job_ids=payload.job_ids, worker=payload.worker, request=request)
+    for job in jobs:
+        write_audit("claim_wiki_compile_job", document_id=job["source_document_id"], actor=payload.worker or "qoder-work", ip=request.client.host if request.client else None, message=job["id"])
+    return {"jobs": jobs}
+
+
+@router.post("/compile-jobs/{job_id}/complete")
+def complete_smart_compile_job_route(job_id: str, payload: CompleteSmartCompileJobRequest, request: Request, authorization: str | None = Header(default=None)):
+    verify_worker_token(authorization)
+    job = complete_smart_compile_job(job_id, summary=payload.summary, content=payload.content, keywords=payload.keywords, worker=payload.worker)
+    write_audit("complete_wiki_compile_job", document_id=job["source_document_id"], actor=payload.worker, ip=request.client.host if request.client else None, message=job_id)
+    return job
+
+
+@router.post("/compile-jobs/{job_id}/fail")
+def fail_smart_compile_job_route(job_id: str, payload: FailSmartCompileJobRequest, request: Request, authorization: str | None = Header(default=None)):
+    verify_worker_token(authorization)
+    job = fail_smart_compile_job(job_id, error_message=payload.error_message, worker=payload.worker)
+    write_audit("fail_wiki_compile_job", document_id=job["source_document_id"], actor=payload.worker, ip=request.client.host if request.client else None, message=job_id)
     return job
 
 
