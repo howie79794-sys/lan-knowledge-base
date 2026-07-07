@@ -258,18 +258,43 @@ POST ${window.location.origin}/api/v1/wiki/compile-jobs/{job_id}/complete`}</pre
               <section className="agentGuideCard skillDownloadCard">
                 <div className="agentGuideTop">
                   <div>
-                    <h4>文档转 Markdown Skill</h4>
-                    <p>给 Qoder Work 安装使用，支持把 PDF、PPTX、DOCX、XLSX 等原始文件转换为 Markdown，并补充图片识别结果。</p>
+                    <h4>司库知识库 Skill 下载</h4>
+                    <p>按解析、编译、查询三个阶段拆分，给 Qoder Work 或其他 Agent 安装后即可接入完整知识库工作流。</p>
                   </div>
-                  <a className="secondaryButton" href="/downloads/doc-to-markdown.skill" download>
-                    <Download size={15} />
-                    下载 Skill
-                  </a>
                 </div>
-                <ol>
-                  <li>下载后交给 Qoder Work 导入或安装。</li>
-                  <li>配合上方解析接口使用：领取任务后下载 <code>raw_url</code>，转换为 Markdown，再回写 <code>complete</code>。</li>
-                </ol>
+                <div className="skillDownloadGrid">
+                  <div className="skillDownloadItem">
+                    <div>
+                      <h5>解析知识库</h5>
+                      <p>读取解析队列，由用户选择任务，下载原文件并回写 Markdown 解析结果。</p>
+                    </div>
+                    <a className="secondaryButton" href="/downloads/treasury-kb-parser.skill" download>
+                      <Download size={15} />
+                      下载
+                    </a>
+                  </div>
+                  <div className="skillDownloadItem">
+                    <div>
+                      <h5>智能编译 Wiki</h5>
+                      <p>领取 Wiki 编译任务，把已解析文档提炼成摘要、结构化页面和关键词。</p>
+                    </div>
+                    <a className="secondaryButton" href="/downloads/treasury-wiki-compiler.skill" download>
+                      <Download size={15} />
+                      下载
+                    </a>
+                  </div>
+                  <div className="skillDownloadItem">
+                    <div>
+                      <h5>查询读取知识</h5>
+                      <p>优先读取 Wiki 索引和上下文包，再按需回源读取 Markdown 正文。</p>
+                    </div>
+                    <a className="secondaryButton" href="/downloads/treasury-kb-reader.skill" download>
+                      <Download size={15} />
+                      下载
+                    </a>
+                  </div>
+                </div>
+                <p className="skillDownloadNote">兼容旧链接：<code>/downloads/doc-to-markdown.skill</code> 已替换为新版解析 Skill。</p>
               </section>
             </div>
           </div>

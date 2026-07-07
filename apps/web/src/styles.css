@@ -1586,6 +1586,43 @@ pre {
   background: var(--surface);
 }
 
+.skillDownloadGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.skillDownloadItem {
+  display: grid;
+  align-content: space-between;
+  gap: 14px;
+  min-height: 168px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-strong);
+}
+
+.skillDownloadItem h5 {
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+
+.skillDownloadItem p,
+.skillDownloadNote {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.skillDownloadItem .secondaryButton {
+  justify-self: start;
+}
+
+.skillDownloadNote {
+  margin-top: 12px;
+}
+
 @media (max-width: 1120px) {
   .appShell {
     grid-template-columns: 1fr;
@@ -1613,6 +1650,7 @@ pre {
   .uploadLayout,
   .adminGrid,
   .agentTokenPanel,
+  .skillDownloadGrid,
   .metricStrip,
   .agentGuideGrid {
     grid-template-columns: 1fr;
