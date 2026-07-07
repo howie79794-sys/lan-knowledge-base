@@ -129,9 +129,35 @@ export type WikiIndex = {
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+const AGENT_TOKEN_STORAGE_KEY = "kb_agent_read_token";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, init);
+export function getAgentReadToken() {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(AGENT_TOKEN_STORAGE_KEY) ?? "";
+}
+
+export function saveAgentReadToken(token: string) {
+  if (typeof window === "undefined") return;
+  const value = token.trim();
+  if (value) {
+    window.localStorage.setItem(AGENT_TOKEN_STORAGE_KEY, value);
+  } else {
+    window.localStorage.removeItem(AGENT_TOKEN_STORAGE_KEY);
+  }
+}
+
+function withAgentToken(init?: RequestInit): RequestInit {
+  const headers = new Headers(init?.headers);
+  const token = getAgentReadToken();
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return { ...init, headers };
+}
+
+async function request<T>(path: string, init?: RequestInit, options?: { agentToken?: boolean }): Promise<T> {
+  const requestInit = options?.agentToken ? withAgentToken(init) : init;
+  const response = await fetch(`${API_BASE}${path}`, requestInit);
   if (!response.ok) {
     let message = response.statusText;
     try {
@@ -262,7 +288,7 @@ export async function createParseJobsBatch(payload: {
 }
 
 export async function fetchParseQueue() {
-  return request<{ total: number; items: ParseQueueItem[] }>("/api/v1/parse-jobs/queue?limit=500");
+  return request<{ total: number; items: ParseQueueItem[] }>("/api/v1/parse-jobs/queue?limit=500", undefined, { agentToken: true });
 }
 
 export async function cancelParseJob(jobId: string) {
@@ -305,7 +331,7 @@ export async function createWikiCompileJobs(payload: {
 }
 
 export async function fetchWikiCompileQueue() {
-  return request<{ total: number; items: WikiCompileQueueItem[] }>("/api/v1/wiki/compile-jobs/queue?limit=500");
+  return request<{ total: number; items: WikiCompileQueueItem[] }>("/api/v1/wiki/compile-jobs/queue?limit=500", undefined, { agentToken: true });
 }
 
 export function rawUrl(id: string) {

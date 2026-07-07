@@ -82,7 +82,8 @@ def create_smart_compile_jobs_route(payload: CreateSmartCompileJobsRequest, requ
 
 
 @router.get("/compile-jobs/queue")
-def smart_compile_queue(limit: int = 200, offset: int = 0):
+def smart_compile_queue(limit: int = 200, offset: int = 0, authorization: str | None = Header(default=None)):
+    verify_worker_token(authorization)
     return list_smart_compile_queue(limit=limit, offset=offset)
 
 

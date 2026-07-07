@@ -1,7 +1,7 @@
 import { Activity, BookOpen, Database, KeyRound, Network, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AuditLog, ParseQueueItem, WikiCompileQueueItem, WikiIndex } from "../api/client";
-import { cancelParseJob, clearOldAuditLogs, compileWiki, createWikiCompileJobs, fetchAuditLogs, fetchDocuments, fetchHealth, fetchParseQueue, fetchWikiCompileQueue, fetchWikiIndex, processUnprocessed } from "../api/client";
+import { cancelParseJob, clearOldAuditLogs, compileWiki, createWikiCompileJobs, fetchAuditLogs, fetchDocuments, fetchHealth, fetchParseQueue, fetchWikiCompileQueue, fetchWikiIndex, getAgentReadToken, processUnprocessed, saveAgentReadToken } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
 
 export function AdminPage() {
@@ -20,6 +20,8 @@ export function AdminPage() {
   const [creatingWikiJobs, setCreatingWikiJobs] = useState(false);
   const [health, setHealth] = useState<string>("检测中");
   const [message, setMessage] = useState("");
+  const [agentTokenInput, setAgentTokenInput] = useState(() => getAgentReadToken());
+  const [agentTokenSaved, setAgentTokenSaved] = useState(() => Boolean(getAgentReadToken()));
 
   const queued = queueItems.filter((item) => item.document_status === "queued").length;
   const processing = queueItems.filter((item) => item.document_status === "processing").length;
@@ -39,9 +41,10 @@ export function AdminPage() {
         setQueueTotal(data.total);
         setSelectedJobIds((current) => current.filter((id) => data.items.some((item) => item.job_id === id)));
       })
-      .catch(() => {
+      .catch((error) => {
         setQueueItems([]);
         setQueueTotal(0);
+        setMessage(error instanceof Error ? `解析队列读取失败：${error.message}` : "解析队列读取失败。");
       });
     fetchDocuments({ status: "uploaded", limit: 1, offset: 0 })
       .then((data) => setUnprocessed(data.total))
@@ -54,9 +57,10 @@ export function AdminPage() {
         setWikiQueueItems(data.items);
         setWikiQueueTotal(data.total);
       })
-      .catch(() => {
+      .catch((error) => {
         setWikiQueueItems([]);
         setWikiQueueTotal(0);
+        setMessage(error instanceof Error ? `智能编译队列读取失败：${error.message}` : "智能编译队列读取失败。");
       });
   }
 
@@ -73,6 +77,14 @@ export function AdminPage() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "提交解析任务失败。");
     }
+  }
+
+  async function saveAgentToken() {
+    saveAgentReadToken(agentTokenInput);
+    const saved = Boolean(agentTokenInput.trim());
+    setAgentTokenSaved(saved);
+    setMessage(saved ? "Agent Token 已保存在当前浏览器，队列接口会自动携带 Authorization。" : "已清除当前浏览器保存的 Agent Token。");
+    await load();
   }
 
   async function runWikiCompile() {
@@ -179,12 +191,27 @@ export function AdminPage() {
         <div className="adminTile">
           <KeyRound size={22} />
           <span>Agent Token</span>
-          <strong>.env 配置</strong>
+          <strong>{agentTokenSaved ? "已保存" : "未保存"}</strong>
         </div>
         <div className="adminTile">
           <Database size={22} />
           <span>未解析文件</span>
           <strong>{unprocessed}</strong>
+        </div>
+      </div>
+      <div className="agentTokenPanel">
+        <div>
+          <h3>Agent/API Token</h3>
+          <p>用于读取解析队列、智能编译队列和 Agent 任务接口。只保存在当前浏览器，不会上传到服务器。</p>
+        </div>
+        <div className="agentTokenControls">
+          <input
+            type="password"
+            value={agentTokenInput}
+            onChange={(event) => setAgentTokenInput(event.target.value)}
+            placeholder="填写 .env 里的 KB_AGENT_READ_TOKEN"
+          />
+          <button className="secondaryButton" onClick={saveAgentToken}>{agentTokenInput.trim() ? "保存" : "清除"}</button>
         </div>
       </div>
       <div className="adminGrid queueMetricGrid">

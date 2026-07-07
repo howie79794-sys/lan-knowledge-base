@@ -460,6 +460,7 @@ input {
 .uploadCard,
 .folderBrowser,
 .queuePanel,
+.agentTokenPanel,
 .processPanel {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1375,6 +1376,31 @@ pre {
   font-size: 20px;
 }
 
+.agentTokenPanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 520px);
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.agentTokenPanel h3 {
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+.agentTokenPanel p {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.agentTokenControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
 .auditPanel,
 .queuePanel {
   padding: 16px;
@@ -1586,6 +1612,7 @@ pre {
   .knowledgeLayout,
   .uploadLayout,
   .adminGrid,
+  .agentTokenPanel,
   .metricStrip,
   .agentGuideGrid {
     grid-template-columns: 1fr;
@@ -1633,8 +1660,10 @@ pre {
 
   .folderBrowserTop,
   .queuePanelHeader,
-  .processPanel {
+  .processPanel,
+  .agentTokenControls {
     display: grid;
+    grid-template-columns: 1fr;
   }
 
   .newFolderControls {

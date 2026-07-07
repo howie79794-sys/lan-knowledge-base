@@ -366,6 +366,8 @@ http://192.168.1.10:18080/openapi.json
 
 系统会把未解析文件加入队列，等待 Qoder Work 领取。
 
+后台管理页如果要查看解析队列或智能编译队列，需要先在页面里的 `Agent/API Token` 填入 `.env` 中的 `KB_AGENT_READ_TOKEN` 并保存。这个 token 只保存在当前浏览器，用来给队列接口自动加 `Authorization` 请求头。
+
 ### 4. 查看解析结果
 
 Qoder Work 回写成功后：
@@ -484,7 +486,7 @@ Content-Type: application/json
 }
 ```
 
-所有 Qoder Work 请求建议带：
+如果配置了 `KB_AGENT_READ_TOKEN`，所有 Qoder Work 队列请求都必须带：
 
 ```http
 Authorization: Bearer 你的KB_AGENT_READ_TOKEN

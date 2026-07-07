@@ -66,7 +66,8 @@ def create_parse_jobs_batch(payload: BatchCreateParseJobsRequest, request: Reque
 
 
 @router.get("/parse-jobs/queue", response_model=ParseQueueResponse)
-def parse_queue(limit: int = 200, offset: int = 0):
+def parse_queue(limit: int = 200, offset: int = 0, authorization: str | None = Header(default=None)):
+    verify_worker_token(authorization)
     return list_parse_queue(limit=limit, offset=offset)
 
 
