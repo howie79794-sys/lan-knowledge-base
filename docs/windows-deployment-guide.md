@@ -366,7 +366,7 @@ http://192.168.1.10:18080/openapi.json
 
 系统会把未解析文件加入队列，等待 Qoder Work 领取。
 
-后台管理页如果要查看解析队列或智能编译队列，需要先在页面里的 `Agent/API Token` 填入 `.env` 中的 `KB_AGENT_READ_TOKEN` 并保存。这个 token 只保存在当前浏览器，用来给队列接口自动加 `Authorization` 请求头。
+后台管理页如果要查看解析队列或知识索引队列，需要先在页面里的 `Agent/API Token` 填入 `.env` 中的 `KB_AGENT_READ_TOKEN` 并保存。这个 token 只保存在当前浏览器，用来给队列接口自动加 `Authorization` 请求头。
 
 ### 4. 查看解析结果
 

@@ -244,7 +244,7 @@ GET ${window.location.origin}/api/v1/documents/{document_id}/content?format=mark
                   <li>使用 claim 返回的 <code>raw_url</code> 下载原文件。</li>
                   <li>解析成功后提交 <code>POST /api/v1/parse-jobs/{`{job_id}`}/complete</code>。</li>
                   <li>解析失败后提交 <code>POST /api/v1/parse-jobs/{`{job_id}`}/fail</code>。</li>
-                  <li>智能编译使用 <code>/api/v1/wiki/compile-jobs/queue</code>、<code>claim</code>、<code>complete</code>。</li>
+                  <li>建立索引使用 <code>/api/v1/wiki/compile-jobs/queue</code>、<code>claim</code>、<code>complete</code>。</li>
                 </ol>
                 <pre>{`GET ${window.location.origin}/api/v1/parse-jobs/queue?limit=500
 POST ${window.location.origin}/api/v1/parse-jobs/claim
@@ -259,7 +259,7 @@ POST ${window.location.origin}/api/v1/wiki/compile-jobs/{job_id}/complete`}</pre
                 <div className="agentGuideTop">
                   <div>
                     <h4>司库知识库 Skill 下载</h4>
-                    <p>按解析、编译、查询三个阶段拆分，给 Qoder Work 或其他 Agent 安装后即可接入完整知识库工作流。</p>
+                    <p>按解析、建立索引、查询三个阶段拆分，给 Qoder Work 或其他 Agent 安装后即可接入完整知识库工作流。</p>
                   </div>
                 </div>
                 <div className="skillDownloadGrid">
@@ -275,10 +275,10 @@ POST ${window.location.origin}/api/v1/wiki/compile-jobs/{job_id}/complete`}</pre
                   </div>
                   <div className="skillDownloadItem">
                     <div>
-                      <h5>智能编译 Wiki</h5>
-                      <p>领取 Wiki 编译任务，把已解析文档提炼成摘要、结构化页面和关键词。</p>
+                      <h5>建立知识索引</h5>
+                      <p>领取 Wiki 索引任务，把已解析文档提炼成摘要、结构化页面和关键词。</p>
                     </div>
-                    <a className="secondaryButton" href="/downloads/treasury-wiki-compiler.skill" download>
+                    <a className="secondaryButton" href="/downloads/treasury-wiki-indexer.skill" download>
                       <Download size={15} />
                       下载
                     </a>
@@ -318,13 +318,13 @@ ${baseUrl}
 - 如果未配置或仍为默认 change-me，本地读取接口通常不会强制鉴权。
 
 推荐读取流程：
-1. 优先读取 Wiki 编译层索引：
+1. 优先读取 Wiki 知识索引：
    GET ${baseUrl}/api/v1/wiki/index
 
    返回重点字段：
    - overview_pages: 各知识分类的总览页
-   - summary_counts: 各分类已编译的单文件摘要数量
-   - stale_documents: 已解析但尚未编译或需要更新的文档
+   - summary_counts: 各分类已建立索引的单文件摘要数量
+   - stale_documents: 已解析但尚未建立索引或需要更新的文档
 
 2. 带着用户问题读取上下文包：
    GET ${baseUrl}/api/v1/wiki/context?query=<用户问题或关键词>&limit=8
@@ -467,10 +467,10 @@ Body:
 - document status 更新为 failed
 - 网站后台解析队列显示错误信息
 
-七、智能编译 Wiki 知识层
-当网站后台创建“智能编译任务”后，Qoder Work 或其他 Agent 可领取已经解析完成的文档，生成更高质量的 Wiki 摘要页。
+七、建立 Wiki 知识索引
+当网站后台创建“知识索引任务”后，Qoder Work 或其他 Agent 可领取已经解析完成的文档，生成更高质量的 Wiki 摘要页。
 
-1. 查看智能编译队列：
+1. 查看知识索引队列：
    GET ${baseUrl}/api/v1/wiki/compile-jobs/queue?limit=500
 
 2. 让用户选择一个或多个 job_id 后领取：
@@ -486,7 +486,7 @@ Body:
    - content: 可直接作为 Wiki 页面读取的 Markdown
    - keywords: 关键词数组
 
-4. 回写智能编译结果：
+4. 回写知识索引结果：
    POST ${baseUrl}/api/v1/wiki/compile-jobs/{job_id}/complete
    Body:
    {

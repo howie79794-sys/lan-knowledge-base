@@ -184,7 +184,7 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
                     <th>格式</th>
                     <th>大小</th>
                     <th>状态</th>
-                    <th>已编译</th>
+                    <th>已索引</th>
                     <th>更新时间</th>
                   </tr>
                 </thead>

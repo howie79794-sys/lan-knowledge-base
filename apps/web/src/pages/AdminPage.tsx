@@ -60,7 +60,7 @@ export function AdminPage() {
       .catch((error) => {
         setWikiQueueItems([]);
         setWikiQueueTotal(0);
-        setMessage(error instanceof Error ? `智能编译队列读取失败：${error.message}` : "智能编译队列读取失败。");
+        setMessage(error instanceof Error ? `知识索引队列读取失败：${error.message}` : "知识索引队列读取失败。");
       });
   }
 
@@ -89,14 +89,14 @@ export function AdminPage() {
 
   async function runWikiCompile() {
     setCompilingWiki(true);
-    setMessage("正在编译知识层...");
+    setMessage("正在建立知识索引...");
     try {
       const job = await compileWiki();
       const index = await fetchWikiIndex();
       setWikiIndex(index);
-      setMessage(`已编译知识层：处理 ${job.total_documents} 条已解析知识，生成/更新 ${job.compiled_pages} 个 Wiki 页面。`);
+      setMessage(`已建立知识索引：处理 ${job.total_documents} 条已解析知识，生成/更新 ${job.compiled_pages} 个 Wiki 页面。`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "编译知识层失败。");
+      setMessage(error instanceof Error ? error.message : "建立知识索引失败。");
     } finally {
       setCompilingWiki(false);
     }
@@ -104,13 +104,13 @@ export function AdminPage() {
 
   async function createSmartWikiJobs() {
     setCreatingWikiJobs(true);
-    setMessage("正在创建智能编译任务...");
+    setMessage("正在创建知识索引任务...");
     try {
       const result = await createWikiCompileJobs({ include_current: false, requested_by: "web" });
-      setMessage(`已创建 ${result.queued} 个智能编译任务，Qoder Work 或其他 Agent 可通过接口领取。`);
+      setMessage(`已创建 ${result.queued} 个知识索引任务，Qoder Work 或其他 Agent 可通过接口领取。`);
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "创建智能编译任务失败。");
+      setMessage(error instanceof Error ? error.message : "创建知识索引任务失败。");
     } finally {
       setCreatingWikiJobs(false);
     }
@@ -202,7 +202,7 @@ export function AdminPage() {
       <div className="agentTokenPanel">
         <div>
           <h3>Agent/API Token</h3>
-          <p>用于读取解析队列、智能编译队列和 Agent 任务接口。只保存在当前浏览器，不会上传到服务器。</p>
+          <p>用于读取解析队列、知识索引队列和 Agent 任务接口。只保存在当前浏览器，不会上传到服务器。</p>
         </div>
         <div className="agentTokenControls">
           <input
@@ -249,12 +249,12 @@ export function AdminPage() {
         </div>
         <div className="adminTile">
           <BookOpen size={22} />
-          <span>智能编译队列</span>
+          <span>知识索引队列</span>
           <strong>{wikiQueued}</strong>
         </div>
         <div className="adminTile">
           <BookOpen size={22} />
-          <span>智能编译中</span>
+          <span>建立索引中</span>
           <strong>{wikiProcessing}</strong>
         </div>
       </div>
@@ -267,16 +267,16 @@ export function AdminPage() {
       </div>
       <div className="processPanel">
         <div>
-          <h3>编译知识层</h3>
-          <p>把已解析 Markdown 编译成单文件摘要和分类总览页。Agent 应优先读取 Wiki 索引和上下文，再按需回源读取原文。</p>
-          {wikiIndex?.latest_job && <p>最近编译：{new Date(wikiIndex.latest_job.updated_at).toLocaleString("zh-CN")}，状态 {wikiIndex.latest_job.status}。</p>}
+          <h3>建立知识索引</h3>
+          <p>把已解析 Markdown 提炼成单文件摘要、关键词和分类总览页。Agent 应优先读取 Wiki 索引和上下文，再按需回源读取原文。</p>
+          {wikiIndex?.latest_job && <p>最近建立索引：{new Date(wikiIndex.latest_job.updated_at).toLocaleString("zh-CN")}，状态 {wikiIndex.latest_job.status}。</p>}
         </div>
         <div className="queueActions">
           <button className="secondaryButton" onClick={createSmartWikiJobs} disabled={creatingWikiJobs}>
-            {creatingWikiJobs ? "创建中..." : "创建智能编译任务"}
+            {creatingWikiJobs ? "创建中..." : "创建知识索引任务"}
           </button>
           <button className="primaryButton" onClick={runWikiCompile} disabled={compilingWiki}>
-            {compilingWiki ? "编译中..." : "本地快速编译"}
+            {compilingWiki ? "建立中..." : "本地快速建立索引"}
           </button>
         </div>
       </div>
@@ -346,8 +346,8 @@ export function AdminPage() {
       <div className="queuePanel">
         <div className="queuePanelHeader">
           <div>
-            <h3>智能编译队列</h3>
-            <p>展示等待 Qoder Work 或其他 Agent 领取的 Wiki 智能编译任务；完成后知识管理列表会显示已编译。</p>
+            <h3>知识索引队列</h3>
+            <p>展示等待 Qoder Work 或其他 Agent 领取的 Wiki 索引任务；完成后知识管理列表会显示已索引。</p>
           </div>
           <div className="queueActions">
             <button className="secondaryButton" onClick={load}>刷新队列</button>
@@ -382,7 +382,7 @@ export function AdminPage() {
               ))}
               {!wikiQueueItems.length && (
                 <tr>
-                  <td colSpan={6}>当前没有待智能编译、编译中或失败的任务。</td>
+                  <td colSpan={6}>当前没有待建立索引、建立索引中或失败的任务。</td>
                 </tr>
               )}
             </tbody>
@@ -448,8 +448,8 @@ function shortId(value: string) {
 function wikiJobStatusLabel(status: string) {
   const labels: Record<string, string> = {
     queued: "队列中",
-    processing: "编译中",
-    failed: "编译失败",
+    processing: "建立索引中",
+    failed: "索引失败",
     succeeded: "已完成"
   };
   return labels[status] ?? status;
@@ -461,11 +461,11 @@ function auditActionLabel(action: string) {
     overwrite_upload: "覆盖上传",
     markdown_import: "导入 Markdown",
     overwrite_markdown_import: "覆盖导入 Markdown",
-    compile_wiki: "编译知识层",
-    create_wiki_compile_jobs: "创建智能编译任务",
-    claim_wiki_compile_job: "领取智能编译任务",
-    complete_wiki_compile_job: "智能编译完成",
-    fail_wiki_compile_job: "智能编译失败",
+    compile_wiki: "建立知识索引",
+    create_wiki_compile_jobs: "创建知识索引任务",
+    claim_wiki_compile_job: "领取知识索引任务",
+    complete_wiki_compile_job: "知识索引完成",
+    fail_wiki_compile_job: "知识索引失败",
     delete: "删除文件",
     create_folder: "新建文件夹",
     delete_folder: "删除文件夹",
