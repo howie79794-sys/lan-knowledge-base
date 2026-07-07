@@ -24,6 +24,7 @@ import { copyText } from "../utils/clipboard";
 
 const defaultFilters: Filters = { purpose: "", format: "", status: "", q: "" };
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
+const MARKDOWN_EXTENSIONS = [".md", ".markdown"];
 const documentStatusLabels: Record<DocumentSummary["status"], string> = {
   uploaded: "未解析",
   queued: "队列中",
@@ -264,6 +265,11 @@ export function DocumentsPage({
     }
     if (markdownFiles.length && trimmedMarkdown) {
       setMessage("请在 Markdown 文件和粘贴正文中选择一种方式导入。");
+      return;
+    }
+    const invalidMarkdownFiles = markdownFiles.filter((file) => !isMarkdownFile(file.name));
+    if (invalidMarkdownFiles.length) {
+      setMessage(`只能导入 .md 或 .markdown 文件：${invalidMarkdownFiles.map((file) => file.name).join("、")}`);
       return;
     }
     if (!markdownFiles.length && !title.trim()) {
@@ -659,10 +665,10 @@ export function DocumentsPage({
                 <label className="dropzone compactDropzone">
                   <FileText size={28} />
                   <span>{markdownFiles.length ? selectedFileLabel(markdownFiles) : "选择 Markdown 文件（可多选）"}</span>
-                  <small>导入后直接进入已解析状态，并出现在知识管理中</small>
+                  <small>仅支持 .md / .markdown，导入后直接进入已解析状态</small>
                   <input
                     type="file"
-                    accept=".md,.markdown,.txt,text/markdown,text/plain"
+                    accept=".md,.markdown,text/markdown"
                     multiple
                     onChange={(event) => {
                       const nextFiles = Array.from(event.target.files ?? []);
@@ -900,5 +906,10 @@ function selectedFileLabel(files: File[]) {
 }
 
 function safeMarkdownFilename(title: string) {
-  return (title.trim() || "未命名知识").replace(/\.(md|markdown|txt)$/i, "").replace(/[\\/:*?"<>|]+/g, "_");
+  return (title.trim() || "未命名知识").replace(/\.(md|markdown)$/i, "").replace(/[\\/:*?"<>|]+/g, "_");
+}
+
+function isMarkdownFile(filename: string) {
+  const lower = filename.toLowerCase();
+  return MARKDOWN_EXTENSIONS.some((ext) => lower.endsWith(ext));
 }

@@ -215,11 +215,11 @@ export async function deleteFolder(purpose: string, path: string) {
   return request<FolderEntry>(`/api/v1/folders?${params.toString()}`, { method: "DELETE" });
 }
 
-export async function fetchKnowledge(filters: { q?: string; folder?: string; purpose?: string }) {
+export async function fetchKnowledge(filters: { q?: string; folder?: string; purpose?: string; limit?: number; offset?: number }) {
   const params = new URLSearchParams();
-  if (filters.q) params.set("q", filters.q);
-  if (filters.folder) params.set("folder", filters.folder);
-  if (filters.purpose) params.set("purpose", filters.purpose);
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") params.set(key, String(value));
+  });
   const suffix = params.toString() ? `?${params.toString()}` : "";
   return request<{ total: number; documents: DocumentSummary[] }>(`/api/v1/knowledge${suffix}`);
 }

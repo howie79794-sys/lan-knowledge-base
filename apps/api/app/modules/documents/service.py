@@ -259,8 +259,8 @@ def create_markdown_knowledge(
     normalized_folder = ensure_purpose_folder_path(canonical_purpose, folder_path)
     upload_filename = safe_filename((file.filename if file else filename) or markdown_filename_from_title(title))
     ext = Path(upload_filename).suffix.lower()
-    if ext not in {".md", ".markdown", ".txt"}:
-        raise HTTPException(status_code=400, detail="Markdown 知识只支持 .md、.markdown 或 .txt 文件。")
+    if ext not in {".md", ".markdown"}:
+        raise HTTPException(status_code=400, detail="Markdown 知识只支持 .md 或 .markdown 文件。")
 
     duplicates = find_duplicate_documents(canonical_purpose, normalized_folder, upload_filename)
     if duplicates and not overwrite:
@@ -307,7 +307,7 @@ def create_markdown_knowledge(
     )
 
     display_title = (title or Path(upload_filename).stem).strip()
-    file_format = "markdown" if ext in {".md", ".markdown"} else "text"
+    file_format = "markdown"
     with db_session() as conn:
         insert_folder_paths(conn, canonical_purpose, normalized_folder)
         conn.execute(
@@ -578,9 +578,17 @@ def unprocessed_document_ids() -> list[str]:
     return [row["id"] for row in rows]
 
 
-def list_knowledge(q: str | None = None, folder_path: str | None = None, purpose: str | None = None) -> tuple[int, list[dict]]:
+def list_knowledge(
+    q: str | None = None,
+    folder_path: str | None = None,
+    purpose: str | None = None,
+    limit: int = 30,
+    offset: int = 0,
+) -> tuple[int, list[dict]]:
     filters = ["d.status = 'ready'"]
     params: list[str] = []
+    safe_limit = min(max(limit, 1), 100)
+    safe_offset = max(offset, 0)
     if folder_path:
         filters.append("d.folder_path = ?")
         params.append(normalize_folder_path(folder_path))
@@ -594,6 +602,15 @@ def list_knowledge(q: str | None = None, folder_path: str | None = None, purpose
         params.extend([needle, needle, needle])
     where_clause = " AND ".join(filters)
     with db_session() as conn:
+        total = conn.execute(
+            f"""
+            SELECT COUNT(*) AS count
+            FROM documents d
+            JOIN document_metadata m ON m.document_id = d.id
+            WHERE {where_clause}
+            """,
+            params,
+        ).fetchone()["count"]
         rows = conn.execute(
             f"""
             SELECT d.*, m.purpose, m.uploader_name, m.confidentiality,
@@ -604,10 +621,11 @@ def list_knowledge(q: str | None = None, folder_path: str | None = None, purpose
             LEFT JOIN wiki_pages w ON w.source_document_id = d.id AND w.page_type = 'document_summary'
             WHERE {where_clause}
             ORDER BY d.updated_at DESC
+            LIMIT ? OFFSET ?
             """,
-            params,
+            [*params, safe_limit, safe_offset],
         ).fetchall()
-    return len(rows), [row_to_summary(row) for row in rows]
+    return total, [row_to_summary(row) for row in rows]
 
 
 def get_document(document_id: str) -> dict:

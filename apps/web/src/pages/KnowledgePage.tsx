@@ -1,4 +1,4 @@
-import { Copy, Database, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Database, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { DocumentSummary, FolderResponse } from "../api/client";
 import { fetchContent, fetchDocument, fetchFolder, fetchKnowledge, type DocumentDetail } from "../api/client";
@@ -15,10 +15,14 @@ const formatLabels: Record<string, string> = {
   text: "Text",
   markdown: "MD"
 };
+const PAGE_SIZE_OPTIONS = [20, 50, 100];
 
 export function KnowledgePage({ purpose }: { purpose: string }) {
   const [q, setQ] = useState("");
   const [items, setItems] = useState<DocumentSummary[]>([]);
+  const [totalKnowledge, setTotalKnowledge] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [content, setContent] = useState("");
@@ -28,11 +32,15 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
 
   const overview = useMemo(() => {
     return {
-      total: items.length,
+      total: totalKnowledge,
       folders: new Set(items.map((item) => item.folder_path || "/")).size,
       sources: new Set(items.map((item) => item.original_filename)).size
     };
-  }, [items]);
+  }, [items, totalKnowledge]);
+
+  const totalPages = Math.max(1, Math.ceil(totalKnowledge / pageSize));
+  const pageStart = totalKnowledge ? (page - 1) * pageSize + 1 : 0;
+  const pageEnd = Math.min(page * pageSize, totalKnowledge);
 
   async function load() {
     const requestFolder = normalizeFolderForPurpose(currentFolder, purpose);
@@ -40,7 +48,19 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
       setCurrentFolder(requestFolder);
       return;
     }
-    const data = await fetchKnowledge({ q, purpose, folder: currentFolder });
+    const data = await fetchKnowledge({
+      q,
+      purpose,
+      folder: currentFolder,
+      limit: pageSize,
+      offset: (page - 1) * pageSize
+    });
+    setTotalKnowledge(data.total);
+    const nextTotalPages = Math.max(1, Math.ceil(data.total / pageSize));
+    if (page > nextTotalPages) {
+      setPage(nextTotalPages);
+      return;
+    }
     setItems(data.documents);
     if (!data.documents.some((item) => item.id === selectedId)) {
       setSelectedId(data.documents[0]?.id ?? null);
@@ -66,11 +86,13 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
     setMessage("");
     setCurrentFolder(`/${purpose}`);
     setFolderInfo(null);
+    setPage(1);
+    setTotalKnowledge(0);
   }, [purpose]);
 
   useEffect(() => {
     load().catch((error) => setMessage(error instanceof Error ? error.message : "读取知识失败。"));
-  }, [q, purpose, currentFolder]);
+  }, [q, purpose, currentFolder, page, pageSize]);
 
   useEffect(() => {
     loadFolder().catch((error) => setMessage(error instanceof Error ? error.message : "读取文件夹失败。"));
@@ -78,7 +100,12 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
 
   useEffect(() => {
     setSelectedId(null);
+    setPage(1);
   }, [currentFolder]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [q, pageSize]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -129,6 +156,24 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
 
       <div className="knowledgeLayout">
         <div className="knowledgeList">
+          <div className="listToolbar">
+            <div className="listToolbarMeta">
+              <strong>{totalKnowledge ? `${pageStart}-${pageEnd}` : "0"} / {totalKnowledge}</strong>
+              <span>按更新时间倒序</span>
+            </div>
+            <div className="listToolbarActions">
+              <label className="pageSizeControl">
+                每页
+                <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
+                  {PAGE_SIZE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
           {items.length ? (
             <div className="tableWrap knowledgeTableWrap">
               <table className="knowledgeTable">
@@ -175,6 +220,17 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
               <p>这个分类下还没有解析好的知识。请先到对应原始文件分类上传，再到后台统一解析。</p>
             </div>
           )}
+          <div className="paginationBar">
+            <button className="iconButton" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page <= 1}>
+              <ChevronLeft size={17} />
+            </button>
+            <span>
+              第 {page} / {totalPages} 页
+            </span>
+            <button className="iconButton" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page >= totalPages}>
+              <ChevronRight size={17} />
+            </button>
+          </div>
         </div>
 
         <aside className="detailPane">
