@@ -14,6 +14,7 @@ from app.modules.wiki.service import (
     fail_smart_compile_job,
     get_wiki_page,
     list_smart_compile_queue,
+    release_failed_smart_compile_job,
     wiki_context,
     wiki_index,
 )
@@ -121,6 +122,14 @@ def fail_smart_compile_job_route(job_id: str, payload: FailSmartCompileJobReques
     verify_worker_token(authorization)
     job = fail_smart_compile_job(job_id, error_message=payload.error_message, worker=payload.worker)
     write_audit("fail_wiki_compile_job", document_id=job["source_document_id"], actor=payload.worker, ip=request.client.host if request.client else None, message=job_id)
+    return job
+
+
+@router.post("/compile-jobs/{job_id}/release")
+def release_failed_smart_compile_job_route(job_id: str, request: Request, authorization: str | None = Header(default=None)):
+    verify_worker_token(authorization)
+    job = release_failed_smart_compile_job(job_id)
+    write_audit("release_wiki_compile_job", document_id=job["source_document_id"], ip=request.client.host if request.client else None, message=job_id)
     return job
 
 

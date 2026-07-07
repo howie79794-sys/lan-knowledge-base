@@ -287,8 +287,11 @@ export async function createParseJobsBatch(payload: {
   });
 }
 
-export async function fetchParseQueue() {
-  return request<{ total: number; items: ParseQueueItem[] }>("/api/v1/parse-jobs/queue?limit=500", undefined, { agentToken: true });
+export async function fetchParseQueue(options?: { limit?: number; offset?: number }) {
+  const params = new URLSearchParams();
+  params.set("limit", String(options?.limit ?? 20));
+  params.set("offset", String(options?.offset ?? 0));
+  return request<{ total: number; items: ParseQueueItem[] }>(`/api/v1/parse-jobs/queue?${params.toString()}`, undefined, { agentToken: true });
 }
 
 export async function cancelParseJob(jobId: string) {
@@ -330,8 +333,15 @@ export async function createWikiCompileJobs(payload: {
   });
 }
 
-export async function fetchWikiCompileQueue() {
-  return request<{ total: number; items: WikiCompileQueueItem[] }>("/api/v1/wiki/compile-jobs/queue?limit=500", undefined, { agentToken: true });
+export async function fetchWikiCompileQueue(options?: { limit?: number; offset?: number }) {
+  const params = new URLSearchParams();
+  params.set("limit", String(options?.limit ?? 20));
+  params.set("offset", String(options?.offset ?? 0));
+  return request<{ total: number; items: WikiCompileQueueItem[] }>(`/api/v1/wiki/compile-jobs/queue?${params.toString()}`, undefined, { agentToken: true });
+}
+
+export async function releaseWikiCompileJob(jobId: string) {
+  return request<WikiCompileJob>(`/api/v1/wiki/compile-jobs/${jobId}/release`, { method: "POST" }, { agentToken: true });
 }
 
 export function rawUrl(id: string) {

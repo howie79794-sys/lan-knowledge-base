@@ -386,6 +386,30 @@ def fail_smart_compile_job(job_id: str, error_message: str, worker: str | None) 
     return job_to_dict(row)
 
 
+def release_failed_smart_compile_job(job_id: str) -> dict:
+    with db_session() as conn:
+        job = conn.execute("SELECT * FROM wiki_compile_jobs WHERE id = ?", (job_id,)).fetchone()
+        if not job:
+            raise HTTPException(status_code=404, detail="知识索引任务不存在。")
+        if job["job_type"] != "smart_document":
+            raise HTTPException(status_code=400, detail="当前任务不是单文件知识索引任务。")
+        if job["status"] != "failed":
+            raise HTTPException(status_code=400, detail="只能释放索引失败状态的任务。")
+
+        now = utc_now()
+        conn.execute(
+            """
+            UPDATE wiki_compile_jobs
+            SET status = 'queued', worker = NULL, error_message = NULL,
+                started_at = NULL, finished_at = NULL, updated_at = ?
+            WHERE id = ?
+            """,
+            (now, job_id),
+        )
+        row = conn.execute("SELECT * FROM wiki_compile_jobs WHERE id = ?", (job_id,)).fetchone()
+    return job_to_dict(row)
+
+
 def get_ready_document_for_wiki(document_id: str) -> dict:
     with db_session() as conn:
         row = conn.execute(

@@ -1,7 +1,7 @@
-import { Activity, BookOpen, Database, KeyRound, Network, X } from "lucide-react";
+import { Activity, BookOpen, Database, KeyRound, Network, RotateCcw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AuditLog, ParseQueueItem, WikiCompileQueueItem, WikiIndex } from "../api/client";
-import { cancelParseJob, clearOldAuditLogs, compileWiki, createWikiCompileJobs, fetchAuditLogs, fetchDocuments, fetchHealth, fetchParseQueue, fetchWikiCompileQueue, fetchWikiIndex, getAgentReadToken, processUnprocessed, saveAgentReadToken } from "../api/client";
+import { cancelParseJob, clearOldAuditLogs, compileWiki, createWikiCompileJobs, fetchAuditLogs, fetchDocuments, fetchHealth, fetchParseQueue, fetchWikiCompileQueue, fetchWikiIndex, getAgentReadToken, processUnprocessed, releaseWikiCompileJob, saveAgentReadToken } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
 
 export function AdminPage() {
@@ -11,11 +11,16 @@ export function AdminPage() {
   const [clearingAudit, setClearingAudit] = useState(false);
   const [queueItems, setQueueItems] = useState<ParseQueueItem[]>([]);
   const [queueTotal, setQueueTotal] = useState(0);
+  const [queuePage, setQueuePage] = useState(0);
+  const [queuePageSize, setQueuePageSize] = useState(20);
   const [unprocessed, setUnprocessed] = useState(0);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [wikiIndex, setWikiIndex] = useState<WikiIndex | null>(null);
   const [wikiQueueItems, setWikiQueueItems] = useState<WikiCompileQueueItem[]>([]);
   const [wikiQueueTotal, setWikiQueueTotal] = useState(0);
+  const [wikiQueuePage, setWikiQueuePage] = useState(0);
+  const [wikiQueuePageSize, setWikiQueuePageSize] = useState(20);
+  const [releasingWikiJobIds, setReleasingWikiJobIds] = useState<string[]>([]);
   const [compilingWiki, setCompilingWiki] = useState(false);
   const [creatingWikiJobs, setCreatingWikiJobs] = useState(false);
   const [health, setHealth] = useState<string>("检测中");
@@ -35,11 +40,12 @@ export function AdminPage() {
     fetchHealth()
       .then((data) => setHealth(data.ok ? "正常" : "异常"))
       .catch(() => setHealth("异常"));
-    fetchParseQueue()
+    fetchParseQueue({ limit: queuePageSize, offset: queuePage * queuePageSize })
       .then((data) => {
         setQueueItems(data.items);
         setQueueTotal(data.total);
         setSelectedJobIds((current) => current.filter((id) => data.items.some((item) => item.job_id === id)));
+        if (!data.items.length && data.total > 0 && queuePage > 0) setQueuePage((page) => Math.max(page - 1, 0));
       })
       .catch((error) => {
         setQueueItems([]);
@@ -52,10 +58,11 @@ export function AdminPage() {
     fetchWikiIndex()
       .then(setWikiIndex)
       .catch(() => setWikiIndex(null));
-    fetchWikiCompileQueue()
+    fetchWikiCompileQueue({ limit: wikiQueuePageSize, offset: wikiQueuePage * wikiQueuePageSize })
       .then((data) => {
         setWikiQueueItems(data.items);
         setWikiQueueTotal(data.total);
+        if (!data.items.length && data.total > 0 && wikiQueuePage > 0) setWikiQueuePage((page) => Math.max(page - 1, 0));
       })
       .catch((error) => {
         setWikiQueueItems([]);
@@ -66,7 +73,7 @@ export function AdminPage() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [queuePage, queuePageSize, wikiQueuePage, wikiQueuePageSize]);
 
   async function runProcessing() {
     setMessage("正在创建解析任务...");
@@ -137,6 +144,22 @@ export function AdminPage() {
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "删除队列任务失败。");
+    }
+  }
+
+  async function releaseFailedWikiJob(item: WikiCompileQueueItem) {
+    if (item.status !== "failed") return;
+    if (!window.confirm(`确认把“${item.document.title}”的失败索引任务释放回队列，允许 Agent 重新领取？`)) return;
+    setReleasingWikiJobIds((current) => [...current, item.id]);
+    setMessage("正在释放失败的知识索引任务...");
+    try {
+      await releaseWikiCompileJob(item.id);
+      setMessage("已释放失败任务，状态已回到队列中，可再次被 Agent 领取建立索引。");
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "释放知识索引任务失败。");
+    } finally {
+      setReleasingWikiJobIds((current) => current.filter((id) => id !== item.id));
     }
   }
 
@@ -341,7 +364,17 @@ export function AdminPage() {
             </tbody>
           </table>
         </div>
-        {queueTotal > queueItems.length && <div className="queueFootnote">当前只显示前 {queueItems.length} 条，共 {queueTotal} 条。</div>}
+        <QueuePager
+          total={queueTotal}
+          page={queuePage}
+          pageSize={queuePageSize}
+          itemCount={queueItems.length}
+          onPageChange={setQueuePage}
+          onPageSizeChange={(size) => {
+            setQueuePageSize(size);
+            setQueuePage(0);
+          }}
+        />
       </div>
       <div className="queuePanel">
         <div className="queuePanelHeader">
@@ -363,6 +396,7 @@ export function AdminPage() {
                 <th>任务</th>
                 <th>Worker</th>
                 <th>更新时间</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -378,17 +412,42 @@ export function AdminPage() {
                   <td>{shortId(item.id)}</td>
                   <td>{item.worker || "-"}</td>
                   <td>{new Date(item.updated_at).toLocaleString("zh-CN")}</td>
+                  <td>
+                    {item.status === "failed" ? (
+                      <button
+                        className="miniActionButton"
+                        onClick={() => releaseFailedWikiJob(item)}
+                        disabled={releasingWikiJobIds.includes(item.id)}
+                        title="释放为队列中，允许 Agent 重新领取"
+                      >
+                        <RotateCcw size={14} />
+                        {releasingWikiJobIds.includes(item.id) ? "释放中" : "重新入队"}
+                      </button>
+                    ) : (
+                      <span className="mutedText">-</span>
+                    )}
+                  </td>
                 </tr>
               ))}
               {!wikiQueueItems.length && (
                 <tr>
-                  <td colSpan={6}>当前没有待建立索引、建立索引中或失败的任务。</td>
+                  <td colSpan={7}>当前没有待建立索引、建立索引中或失败的任务。</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-        {wikiQueueTotal > wikiQueueItems.length && <div className="queueFootnote">当前只显示前 {wikiQueueItems.length} 条，共 {wikiQueueTotal} 条。</div>}
+        <QueuePager
+          total={wikiQueueTotal}
+          page={wikiQueuePage}
+          pageSize={wikiQueuePageSize}
+          itemCount={wikiQueueItems.length}
+          onPageChange={setWikiQueuePage}
+          onPageSizeChange={(size) => {
+            setWikiQueuePageSize(size);
+            setWikiQueuePage(0);
+          }}
+        />
       </div>
       {showAudit && (
         <div className="modalBackdrop" role="dialog" aria-modal="true" aria-label="最近操作日志">
@@ -441,6 +500,46 @@ export function AdminPage() {
   );
 }
 
+function QueuePager({
+  total,
+  page,
+  pageSize,
+  itemCount,
+  onPageChange,
+  onPageSizeChange
+}: {
+  total: number;
+  page: number;
+  pageSize: number;
+  itemCount: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+}) {
+  const start = total === 0 ? 0 : page * pageSize + 1;
+  const end = total === 0 ? 0 : page * pageSize + itemCount;
+  const canPrev = page > 0;
+  const canNext = end < total;
+
+  return (
+    <div className="queuePager">
+      <span>{start}-{end} / 共 {total}</span>
+      <div className="queuePagerControls">
+        <label>
+          每页
+          <select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))}>
+            <option value={10}>10</option>
+            <option value={20}>20</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+        </label>
+        <button className="iconButton" onClick={() => onPageChange(page - 1)} disabled={!canPrev} title="上一页">‹</button>
+        <button className="iconButton" onClick={() => onPageChange(page + 1)} disabled={!canNext} title="下一页">›</button>
+      </div>
+    </div>
+  );
+}
+
 function shortId(value: string) {
   return value.length > 14 ? `${value.slice(0, 10)}...` : value;
 }
@@ -466,6 +565,7 @@ function auditActionLabel(action: string) {
     claim_wiki_compile_job: "领取知识索引任务",
     complete_wiki_compile_job: "知识索引完成",
     fail_wiki_compile_job: "知识索引失败",
+    release_wiki_compile_job: "释放知识索引任务",
     delete: "删除文件",
     create_folder: "新建文件夹",
     delete_folder: "删除文件夹",

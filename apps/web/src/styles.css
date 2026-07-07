@@ -1444,11 +1444,81 @@ pre {
   padding-top: 10px;
 }
 
+.queuePager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink-3);
+  font-size: 12px;
+  padding-top: 10px;
+}
+
+.queuePagerControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.queuePagerControls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+}
+
+.queuePagerControls select {
+  width: 72px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0 8px;
+}
+
+.queuePagerControls .iconButton {
+  width: 32px;
+  height: 32px;
+  box-shadow: none;
+}
+
 .queueCheckbox {
   width: 16px;
   height: 16px;
   padding: 0;
   border-radius: 4px;
+}
+
+.miniActionButton {
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.miniActionButton:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.miniActionButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.mutedText {
+  color: var(--ink-3);
 }
 
 .processPanel {
@@ -1699,9 +1769,14 @@ pre {
   .folderBrowserTop,
   .queuePanelHeader,
   .processPanel,
+  .queuePager,
   .agentTokenControls {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .queuePagerControls {
+    justify-content: space-between;
   }
 
   .newFolderControls {

@@ -13,6 +13,7 @@ AUDITED_ACTIONS = {
     "claim_wiki_compile_job",
     "complete_wiki_compile_job",
     "fail_wiki_compile_job",
+    "release_wiki_compile_job",
     "delete",
     "create_parse_job",
     "create_parse_jobs_batch",
