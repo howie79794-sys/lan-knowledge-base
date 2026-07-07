@@ -180,6 +180,15 @@ KB_SQLITE_PATH=/data/kb/kb.sqlite3
 KB_MAX_UPLOAD_MB=300
 KB_AGENT_READ_TOKEN=请换成一串较长的随机字符
 KB_ALLOW_ORIGINS=http://localhost:18080,http://127.0.0.1:18080,http://localhost,http://127.0.0.1,http://localhost:5173,http://127.0.0.1:5173
+
+# 如果 Docker Hub / Debian / npm / pip 访问不稳定，可以保留下面这些国内镜像配置。
+PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.12-slim
+NODE_BASE_IMAGE=docker.m.daocloud.io/library/node:24-alpine
+NGINX_BASE_IMAGE=docker.m.daocloud.io/library/nginx:1.27-alpine
+APT_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian
+APT_SECURITY_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian-security
+PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+NPM_REGISTRY=https://registry.npmmirror.com
 ```
 
 说明：
@@ -188,6 +197,8 @@ KB_ALLOW_ORIGINS=http://localhost:18080,http://127.0.0.1:18080,http://localhost,
 - `/data/kb` 是 Docker 容器内目录。
 - Docker 会把 `F:\kb-data` 映射成容器内的 `/data/kb`。
 - `KB_AGENT_READ_TOKEN` 是给 Qoder Work 和其他 Agent 调接口用的令牌，正式环境不要使用 `change-me`。
+- `PYTHON_BASE_IMAGE`、`NODE_BASE_IMAGE`、`NGINX_BASE_IMAGE` 用来绕开 Docker Hub 访问不稳定的问题。
+- `APT_MIRROR`、`PIP_INDEX_URL`、`NPM_REGISTRY` 分别用于 Debian、Python、Node 依赖下载。
 
 ## 八、启动网站
 
@@ -866,7 +877,69 @@ http://台式机IP:18081
 docker compose logs -f api
 ```
 
-### 6. Agent 401
+### 6. Docker 构建时拉不到基础镜像
+
+如果看到类似：
+
+```text
+failed to fetch anonymous token
+https://auth.docker.io/token
+load metadata for docker.io/library/python:3.12-slim
+```
+
+说明 Docker 还没进入项目构建步骤，卡在拉 Docker Hub 基础镜像。
+
+处理：
+
+1. 确认 `.env` 里有下面三行：
+
+```dotenv
+PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.12-slim
+NODE_BASE_IMAGE=docker.m.daocloud.io/library/node:24-alpine
+NGINX_BASE_IMAGE=docker.m.daocloud.io/library/nginx:1.27-alpine
+```
+
+2. 重新构建：
+
+```powershell
+docker compose build --no-cache
+docker compose up -d
+```
+
+如果这个镜像源也不可用，可以尝试把 `docker.m.daocloud.io` 换成 `docker.1ms.run`：
+
+```dotenv
+PYTHON_BASE_IMAGE=docker.1ms.run/library/python:3.12-slim
+NODE_BASE_IMAGE=docker.1ms.run/library/node:24-alpine
+NGINX_BASE_IMAGE=docker.1ms.run/library/nginx:1.27-alpine
+```
+
+### 7. Docker 构建时 apt-get update 失败
+
+如果看到类似：
+
+```text
+Unable to connect to deb.debian.org
+Unable to locate package build-essential
+```
+
+说明基础镜像已经拉下来了，但容器内访问 Debian 软件源失败。
+
+确认 `.env` 里有：
+
+```dotenv
+APT_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian
+APT_SECURITY_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian-security
+```
+
+如果清华源不可用，可以换中科大：
+
+```dotenv
+APT_MIRROR=https://mirrors.ustc.edu.cn/debian
+APT_SECURITY_MIRROR=https://mirrors.ustc.edu.cn/debian-security
+```
+
+### 8. Agent 401
 
 原因通常是 token 不一致。
 
@@ -885,7 +958,7 @@ Authorization: Bearer 你的KB_AGENT_READ_TOKEN
 docker compose restart api
 ```
 
-### 7. Qoder Work 领取不到任务
+### 9. Qoder Work 领取不到任务
 
 排查：
 
