@@ -45,7 +45,7 @@ export function DocumentTable({
 
   return (
     <div className="tableWrap">
-      <table>
+      <table className="documentTable">
         <thead>
           <tr>
             <th className="selectColumn">
@@ -57,12 +57,12 @@ export function DocumentTable({
                 aria-label="选择本页全部文件"
               />
             </th>
-            <th>资料</th>
-            <th>作用</th>
-            <th>格式</th>
-            <th>大小</th>
-            <th>状态</th>
-            <th>更新时间</th>
+            <th className="documentNameColumn">资料</th>
+            <th className="purposeColumn">作用</th>
+            <th className="formatColumn">格式</th>
+            <th className="sizeColumn">大小</th>
+            <th className="statusColumn">状态</th>
+            <th className="updatedColumn">更新时间</th>
           </tr>
         </thead>
         <tbody>
@@ -77,19 +77,21 @@ export function DocumentTable({
                   aria-label={`选择 ${doc.title}`}
                 />
               </td>
-              <td>
+              <td className="documentNameColumn">
                 <div className="docTitle">{doc.title}</div>
                 <div className="docMeta">{doc.original_filename}</div>
               </td>
-              <td>{doc.purpose}</td>
-              <td>
+              <td className="purposeColumn" title={doc.purpose}>
+                <span className="purposeText">{doc.purpose}</span>
+              </td>
+              <td className="formatColumn">
                 <span className="formatPill">{formatLabels[doc.file_format] ?? doc.file_format}</span>
               </td>
-              <td>{formatBytes(doc.size_bytes)}</td>
-              <td>
+              <td className="sizeColumn">{formatBytes(doc.size_bytes)}</td>
+              <td className="statusColumn">
                 <StatusBadge status={doc.status} />
               </td>
-              <td>{formatDate(doc.updated_at)}</td>
+              <td className="updatedColumn">{formatDate(doc.updated_at)}</td>
             </tr>
           ))}
         </tbody>

@@ -479,6 +479,53 @@ input {
   overflow: auto;
 }
 
+.documentTable {
+  width: 100%;
+  min-width: 760px;
+  table-layout: fixed;
+}
+
+.documentTable th,
+.documentTable td {
+  overflow: hidden;
+}
+
+.documentTable .selectColumn {
+  width: 42px;
+}
+
+.documentNameColumn {
+  width: auto;
+}
+
+.purposeColumn {
+  width: 136px;
+}
+
+.formatColumn {
+  width: 82px;
+}
+
+.sizeColumn {
+  width: 84px;
+}
+
+.statusColumn {
+  width: 104px;
+}
+
+.updatedColumn {
+  width: 96px;
+}
+
+.purposeText {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .listToolbar,
 .paginationBar {
   min-height: 44px;
@@ -894,7 +941,14 @@ tr:hover,
 .docTitle {
   color: var(--ink);
   font-weight: 800;
-  max-width: 360px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.documentTable .docMeta {
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1691,6 +1745,47 @@ pre {
 
 .skillDownloadNote {
   margin-top: 12px;
+}
+
+@media (max-width: 1500px) {
+  .mainArea {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+
+  .documentLayout {
+    grid-template-columns: minmax(0, 1fr) 350px;
+    gap: 14px;
+  }
+
+  .documentTable {
+    min-width: 700px;
+  }
+
+  .purposeColumn {
+    width: 116px;
+  }
+
+  .formatColumn {
+    width: 72px;
+  }
+
+  .sizeColumn {
+    width: 76px;
+  }
+
+  .statusColumn {
+    width: 96px;
+  }
+
+  .updatedColumn {
+    width: 84px;
+  }
+
+  .documentTable td {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
 }
 
 @media (max-width: 1120px) {
