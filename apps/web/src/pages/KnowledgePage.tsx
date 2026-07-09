@@ -179,36 +179,38 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
               <table className="knowledgeTable">
                 <thead>
                   <tr>
-                    <th>资料</th>
-                    <th>作用</th>
-                    <th>格式</th>
-                    <th>大小</th>
-                    <th>状态</th>
-                    <th>已索引</th>
-                    <th>更新时间</th>
+                    <th className="knowledgeNameColumn">资料</th>
+                    <th className="knowledgePurposeColumn">作用</th>
+                    <th className="knowledgeFormatColumn">格式</th>
+                    <th className="knowledgeSizeColumn">大小</th>
+                    <th className="knowledgeStatusColumn">状态</th>
+                    <th className="knowledgeIndexedColumn">已索引</th>
+                    <th className="knowledgeUpdatedColumn">更新时间</th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((item) => (
                     <tr key={item.id} className={selectedId === item.id ? "selectedRow" : ""} onClick={() => setSelectedId(item.id)}>
-                      <td>
+                      <td className="knowledgeNameColumn">
                         <div className="docTitle knowledgeDocTitle">{item.title}</div>
                         <div className="docMeta">{item.original_filename}</div>
                       </td>
-                      <td>{item.purpose}</td>
-                      <td>
+                      <td className="knowledgePurposeColumn" title={item.purpose}>
+                        <span className="purposeText">{item.purpose}</span>
+                      </td>
+                      <td className="knowledgeFormatColumn">
                         <span className="formatPill">{formatLabels[item.file_format] ?? item.file_format}</span>
                       </td>
-                      <td>{formatBytes(item.size_bytes)}</td>
-                      <td>
+                      <td className="knowledgeSizeColumn">{formatBytes(item.size_bytes)}</td>
+                      <td className="knowledgeStatusColumn">
                         <StatusBadge status={item.status} />
                       </td>
-                      <td>
+                      <td className="knowledgeIndexedColumn">
                         <span className={item.wiki_compiled ? "compilePill compiled" : "compilePill"}>
                           {item.wiki_compiled ? "是" : "否"}
                         </span>
                       </td>
-                      <td>{formatDate(item.updated_at)}</td>
+                      <td className="knowledgeUpdatedColumn">{formatDate(item.updated_at)}</td>
                     </tr>
                   ))}
                 </tbody>
