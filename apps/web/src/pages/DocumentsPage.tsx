@@ -601,6 +601,12 @@ export function DocumentsPage({
     setMessage(copied ? "解析正文链接已复制。" : "浏览器限制了自动复制，请手动复制正文链接。");
   }
 
+  async function copyOriginalFilename() {
+    if (!detail) return;
+    const copied = await copyText(detail.original_filename);
+    setMessage(copied ? "原始文件名已复制。" : "浏览器限制了自动复制，请手动复制文件名。");
+  }
+
   return (
     <section className="workspace">
       <div className="sectionHeader">
@@ -816,7 +822,9 @@ export function DocumentsPage({
                 <div className="detailTop">
                   <div>
                     <h3>{detail.title}</h3>
-                    <p>{detail.original_filename}</p>
+                    <p className="detailFilename" title={detail.original_filename}>
+                      {detail.original_filename}
+                    </p>
                   </div>
                   <StatusBadge status={detail.status} />
                 </div>
@@ -850,6 +858,10 @@ export function DocumentsPage({
                   <button className="secondaryButton" onClick={copyAgentLink} disabled={detail.status !== "ready"}>
                     <Copy size={16} />
                     复制解析正文
+                  </button>
+                  <button className="secondaryButton" onClick={copyOriginalFilename}>
+                    <Copy size={16} />
+                    复制文件名
                   </button>
                   <button className="secondaryButton" onClick={() => handleReprocess(detail.id)}>
                     <RefreshCcw size={16} />

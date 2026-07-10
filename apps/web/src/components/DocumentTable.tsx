@@ -58,7 +58,6 @@ export function DocumentTable({
               />
             </th>
             <th className="documentNameColumn">资料</th>
-            <th className="purposeColumn">作用</th>
             <th className="formatColumn">格式</th>
             <th className="sizeColumn">大小</th>
             <th className="statusColumn">状态</th>
@@ -78,11 +77,12 @@ export function DocumentTable({
                 />
               </td>
               <td className="documentNameColumn">
-                <div className="docTitle">{doc.title}</div>
-                <div className="docMeta">{doc.original_filename}</div>
-              </td>
-              <td className="purposeColumn" title={doc.purpose}>
-                <span className="purposeText">{doc.purpose}</span>
+                <div className="docTitle" title={doc.title}>
+                  {doc.title}
+                </div>
+                <div className="docMeta" title={doc.original_filename}>
+                  {doc.original_filename}
+                </div>
               </td>
               <td className="formatColumn">
                 <span className="formatPill">{formatLabels[doc.file_format] ?? doc.file_format}</span>

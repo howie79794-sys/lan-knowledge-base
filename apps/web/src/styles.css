@@ -514,7 +514,7 @@ input {
 
 .documentTable {
   width: 100%;
-  min-width: 760px;
+  min-width: 650px;
   table-layout: fixed;
 }
 
@@ -531,10 +531,6 @@ input {
   width: auto;
 }
 
-.purposeColumn {
-  width: 136px;
-}
-
 .formatColumn {
   width: 82px;
 }
@@ -549,14 +545,6 @@ input {
 
 .updatedColumn {
   width: 96px;
-}
-
-.purposeText {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .listToolbar,
@@ -830,7 +818,7 @@ input {
 }
 
 .knowledgeTable {
-  min-width: 780px;
+  min-width: 660px;
   table-layout: fixed;
 }
 
@@ -841,10 +829,6 @@ input {
 
 .knowledgeNameColumn {
   width: auto;
-}
-
-.knowledgePurposeColumn {
-  width: 126px;
 }
 
 .knowledgeFormatColumn {
@@ -871,8 +855,20 @@ input {
   max-width: 100%;
 }
 
+.documentTable .docTitle,
+.knowledgeTable .docTitle {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.documentTable .docMeta,
 .knowledgeTable .docMeta {
   max-width: 100%;
+  margin-top: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1161,6 +1157,14 @@ tr:hover,
 }
 
 .detailTop h3 {
+  overflow-wrap: anywhere;
+}
+
+.detailTop > div {
+  min-width: 0;
+}
+
+.detailFilename {
   overflow-wrap: anywhere;
 }
 
@@ -1812,15 +1816,11 @@ pre {
   }
 
   .documentTable {
-    min-width: 700px;
+    min-width: 610px;
   }
 
   .knowledgeTable {
-    min-width: 700px;
-  }
-
-  .purposeColumn {
-    width: 116px;
+    min-width: 620px;
   }
 
   .formatColumn {
@@ -1837,10 +1837,6 @@ pre {
 
   .updatedColumn {
     width: 84px;
-  }
-
-  .knowledgePurposeColumn {
-    width: 116px;
   }
 
   .knowledgeFormatColumn {

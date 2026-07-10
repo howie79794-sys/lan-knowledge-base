@@ -124,6 +124,12 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
     setMessage(copied ? "知识正文链接已复制。" : "浏览器限制了自动复制，请手动复制地址栏或正文链接。");
   }
 
+  async function copyOriginalFilename() {
+    if (!detail) return;
+    const copied = await copyText(detail.original_filename);
+    setMessage(copied ? "来源文件名已复制。" : "浏览器限制了自动复制，请手动复制来源文件名。");
+  }
+
   return (
     <section className="workspace">
       <div className="sectionHeader">
@@ -180,7 +186,6 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
                 <thead>
                   <tr>
                     <th className="knowledgeNameColumn">资料</th>
-                    <th className="knowledgePurposeColumn">作用</th>
                     <th className="knowledgeFormatColumn">格式</th>
                     <th className="knowledgeSizeColumn">大小</th>
                     <th className="knowledgeStatusColumn">状态</th>
@@ -192,11 +197,12 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
                   {items.map((item) => (
                     <tr key={item.id} className={selectedId === item.id ? "selectedRow" : ""} onClick={() => setSelectedId(item.id)}>
                       <td className="knowledgeNameColumn">
-                        <div className="docTitle knowledgeDocTitle">{item.title}</div>
-                        <div className="docMeta">{item.original_filename}</div>
-                      </td>
-                      <td className="knowledgePurposeColumn" title={item.purpose}>
-                        <span className="purposeText">{item.purpose}</span>
+                        <div className="docTitle knowledgeDocTitle" title={item.title}>
+                          {item.title}
+                        </div>
+                        <div className="docMeta" title={item.original_filename}>
+                          {item.original_filename}
+                        </div>
                       </td>
                       <td className="knowledgeFormatColumn">
                         <span className="formatPill">{formatLabels[item.file_format] ?? item.file_format}</span>
@@ -241,7 +247,9 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
               <div className="detailTop">
                 <div>
                   <h3>{detail.title}</h3>
-                  <p>来源：{detail.original_filename}</p>
+                  <p className="detailFilename" title={detail.original_filename}>
+                    来源：{detail.original_filename}
+                  </p>
                 </div>
                 <StatusBadge status={detail.status} />
               </div>
@@ -267,6 +275,10 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
                 <button className="secondaryButton" onClick={copyKnowledgeLink}>
                   <Copy size={16} />
                   复制知识链接
+                </button>
+                <button className="secondaryButton" onClick={copyOriginalFilename}>
+                  <Copy size={16} />
+                  复制来源文件名
                 </button>
               </div>
               <div className="contentPreview">
