@@ -1,10 +1,11 @@
-import { ChevronDown, Clipboard, Database, Download, FileText, Library, Settings, X } from "lucide-react";
+import { BookOpen, ChevronDown, Clipboard, Database, Download, FileText, Library, Settings, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Categories } from "./api/client";
 import { fetchCategories } from "./api/client";
 import { AdminPage } from "./pages/AdminPage";
 import { DocumentsPage } from "./pages/DocumentsPage";
 import { KnowledgePage } from "./pages/KnowledgePage";
+import { WorkGuidesPage } from "./pages/WorkGuidesPage";
 import { copyText } from "./utils/clipboard";
 
 const FALLBACK_PURPOSES = [
@@ -19,10 +20,10 @@ const FALLBACK_PURPOSES = [
   "其他"
 ];
 
-type View = "raw" | "knowledge" | "admin";
+type View = "raw" | "knowledge" | "guides" | "admin";
 
 export function App() {
-  const [view, setView] = useState<View>("raw");
+  const [view, setView] = useState<View>(() => (new URLSearchParams(window.location.search).has("workGuide") ? "guides" : "raw"));
   const [selectedPurpose, setSelectedPurpose] = useState("招投标需求清单");
   const [expandedSections, setExpandedSections] = useState({
     raw: true,
@@ -42,6 +43,18 @@ export function App() {
 
   function toggleSection(section: keyof typeof expandedSections) {
     setExpandedSections((current) => ({ ...current, [section]: !current[section] }));
+  }
+
+  function navigateTo(nextView: View) {
+    setView(nextView);
+    if (nextView !== "guides") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("workGuide")) {
+        url.searchParams.delete("workGuide");
+        url.hash = "";
+        window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+      }
+    }
   }
 
   async function copyAgentGuide(kind: "read" | "parse") {
@@ -69,6 +82,15 @@ export function App() {
           </div>
         </div>
         <nav className="treeNav">
+          <div className={view === "guides" ? "navGroup parentActive" : "navGroup"}>
+            <button className="navParent standaloneNav" onClick={() => navigateTo("guides")}>
+              <span>
+                <BookOpen size={18} />
+                工作指引
+              </span>
+            </button>
+          </div>
+
           <div className={view === "raw" ? "navGroup parentActive" : "navGroup"}>
             <button
               className="navParent"
@@ -89,7 +111,7 @@ export function App() {
                     key={`raw-${purpose}`}
                     className={view === "raw" && selectedPurpose === purpose ? "navItem level2 active" : "navItem level2"}
                     onClick={() => {
-                      setView("raw");
+                      navigateTo("raw");
                       setSelectedPurpose(purpose);
                     }}
                   >
@@ -120,7 +142,7 @@ export function App() {
                     key={`knowledge-${purpose}`}
                     className={view === "knowledge" && selectedPurpose === purpose ? "navItem level2 active" : "navItem level2"}
                     onClick={() => {
-                      setView("knowledge");
+                      navigateTo("knowledge");
                       setSelectedPurpose(purpose);
                     }}
                   >
@@ -146,7 +168,7 @@ export function App() {
             </button>
             {expandedSections.admin && (
               <div className="navChildren" id="admin-nav">
-                <button className={view === "admin" ? "navItem level2 active" : "navItem level2"} onClick={() => setView("admin")}>
+                <button className={view === "admin" ? "navItem level2 active" : "navItem level2"} onClick={() => navigateTo("admin")}>
                   服务与解析
                 </button>
               </div>
@@ -189,6 +211,7 @@ export function App() {
           />
         )}
         {view === "knowledge" && <KnowledgePage purpose={selectedPurpose} />}
+        {view === "guides" && <WorkGuidesPage />}
         {view === "admin" && <AdminPage />}
       </main>
       {showAgentGuide && (

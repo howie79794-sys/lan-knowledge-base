@@ -128,6 +128,22 @@ export type WikiIndex = {
   stale_documents: { id: string; title: string; purpose: string; updated_at: string }[];
 };
 
+export type WorkGuideSummary = {
+  slug: string;
+  title: string;
+  summary: string;
+  categories: string[];
+  version?: string | null;
+  effective_date?: string | null;
+  updated_at: string;
+  status: string;
+  pinned: boolean;
+};
+
+export type WorkGuideDetail = WorkGuideSummary & {
+  content: string;
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 const AGENT_TOKEN_STORAGE_KEY = "kb_agent_read_token";
 
@@ -177,6 +193,26 @@ export async function fetchHealth() {
 
 export async function fetchCategories() {
   return request<Categories>("/api/v1/categories");
+}
+
+export async function fetchWorkGuides(filters?: { q?: string; category?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.q) params.set("q", filters.q);
+  if (filters?.category) params.set("category", filters.category);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return request<{ total: number; categories: string[]; guides: WorkGuideSummary[] }>(`/api/v1/work-guides${suffix}`);
+}
+
+export async function fetchWorkGuide(slug: string) {
+  return request<WorkGuideDetail>(`/api/v1/work-guides/${encodeURIComponent(slug)}`);
+}
+
+export function workGuideAssetUrl(slug: string, source?: string) {
+  if (!source || /^(?:[a-z]+:)?\/\//i.test(source) || source.startsWith("data:") || source.startsWith("/")) return source ?? "";
+  const normalized = source.replace(/^\.\//, "").split(/[?#]/, 1)[0];
+  const segments = normalized.split("/").filter((segment) => segment && segment !== ".");
+  if (!segments.length || segments.some((segment) => segment === "..")) return "";
+  return `${API_BASE}/api/v1/work-guides/${encodeURIComponent(slug)}/assets/${segments.map(encodeURIComponent).join("/")}`;
 }
 
 export async function fetchDocuments(filters: {

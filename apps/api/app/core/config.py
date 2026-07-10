@@ -9,6 +9,7 @@ class Settings:
     processed_dir: str = os.getenv("KB_PROCESSED_DIR", os.path.join(os.getenv("KB_DATA_DIR", "./data"), "processed"))
     tmp_dir: str = os.getenv("KB_TMP_DIR", os.path.join(os.getenv("KB_DATA_DIR", "./data"), "tmp"))
     backup_dir: str = os.getenv("KB_BACKUP_DIR", os.path.join(os.getenv("KB_DATA_DIR", "./data"), "backups"))
+    work_guides_dir: str = os.getenv("KB_WORK_GUIDES_DIR", os.path.join(os.getenv("KB_DATA_DIR", "./data"), "work-guides"))
     sqlite_path: str = os.getenv("KB_SQLITE_PATH", os.path.join(os.getenv("KB_DATA_DIR", "./data"), "kb.sqlite3"))
     max_upload_mb: int = int(os.getenv("KB_MAX_UPLOAD_MB", "300"))
     agent_read_token: str = os.getenv("KB_AGENT_READ_TOKEN", "change-me")

@@ -10,6 +10,7 @@ def ensure_data_dirs() -> None:
         settings.processed_dir,
         settings.tmp_dir,
         settings.backup_dir,
+        settings.work_guides_dir,
         Path(settings.sqlite_path).parent,
     ]:
         Path(path).mkdir(parents=True, exist_ok=True)

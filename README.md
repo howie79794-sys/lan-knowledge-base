@@ -5,6 +5,7 @@
 当前版本已经从“资料入口 MVP”演进为一个可用的单机知识库：
 
 - Windows 台式机或本地开发机部署，局域网固定 IP 访问。
+- 工作指引直接读取数据目录中的 Markdown，动态汇总分类并展示同目录图片。
 - React + Vite 前端，FastAPI 后端，SQLite 元数据，本地目录存储原文件和解析产物。
 - 支持 PDF、PPT、Excel、Word、CSV、Markdown、Text 等办公资料上传。
 - 支持按知识分类建立文件夹、进入子文件夹、新建/删除空文件夹。
@@ -20,6 +21,7 @@
 
 - [局域网知识库架构与接口说明](docs/local-mvp-plan.md)
 - [Windows 台式机部署手册](docs/windows-deployment-guide.md)
+- [工作指引目录维护说明](docs/work-guides-guide.md)
 
 ## 本地开发
 
@@ -63,7 +65,7 @@ Windows 台式机 + Docker Desktop + Docker Compose + Caddy
 
 ```text
 F:\lan-knowledge-base\   项目代码
-F:\kb-data\              上传文件、解析产物、SQLite 数据库、备份
+F:\kb-data\              上传文件、解析产物、工作指引、SQLite 数据库、备份
 ```
 
 启动：
@@ -133,6 +135,7 @@ KB_UPLOAD_DIR=/data/kb/uploads
 KB_PROCESSED_DIR=/data/kb/processed
 KB_TMP_DIR=/data/kb/tmp
 KB_BACKUP_DIR=/data/kb/backups
+KB_WORK_GUIDES_DIR=/data/kb/work-guides
 KB_SQLITE_PATH=/data/kb/kb.sqlite3
 KB_MAX_UPLOAD_MB=300
 KB_AGENT_READ_TOKEN=change-me

@@ -29,7 +29,7 @@ Qoder Work -> /api/v1/parse-jobs/next -> 领取解析任务
 
 ```text
 F:\lan-knowledge-base\   程序目录，放网站代码
-F:\kb-data\              数据目录，放上传文件、解析结果、数据库、备份
+F:\kb-data\              数据目录，放上传文件、解析结果、工作指引、数据库、备份
 ```
 
 数据目录建议：
@@ -143,6 +143,7 @@ mkdir F:\kb-data\uploads
 mkdir F:\kb-data\processed
 mkdir F:\kb-data\tmp
 mkdir F:\kb-data\backups
+mkdir F:\kb-data\work-guides
 ```
 
 目录已存在不影响。
@@ -176,6 +177,7 @@ KB_UPLOAD_DIR=/data/kb/uploads
 KB_PROCESSED_DIR=/data/kb/processed
 KB_TMP_DIR=/data/kb/tmp
 KB_BACKUP_DIR=/data/kb/backups
+KB_WORK_GUIDES_DIR=/data/kb/work-guides
 KB_SQLITE_PATH=/data/kb/kb.sqlite3
 KB_MAX_UPLOAD_MB=300
 KB_AGENT_READ_TOKEN=请换成一串较长的随机字符
@@ -196,6 +198,7 @@ NPM_REGISTRY=https://registry.npmmirror.com
 - `KB_HOST_DATA_DIR=F:\kb-data` 是 Windows 上真实目录。
 - `/data/kb` 是 Docker 容器内目录。
 - Docker 会把 `F:\kb-data` 映射成容器内的 `/data/kb`。
+- 工作指引放在 `F:\kb-data\work-guides`，刷新网页即可重新读取，不需要重新构建 Docker。
 - `KB_AGENT_READ_TOKEN` 是给 Qoder Work 和其他 Agent 调接口用的令牌，正式环境不要使用 `change-me`。
 - `PYTHON_BASE_IMAGE`、`NODE_BASE_IMAGE`、`NGINX_BASE_IMAGE` 用来绕开 Docker Hub 访问不稳定的问题。
 - `APT_MIRROR`、`PIP_INDEX_URL`、`NPM_REGISTRY` 分别用于 Debian、Python、Node 依赖下载。
@@ -564,6 +567,7 @@ Docker Desktop 启动后，容器会自动恢复。
 F:\kb-data\kb.sqlite3
 F:\kb-data\uploads\
 F:\kb-data\processed\
+F:\kb-data\work-guides\
 ```
 
 建议备份到移动硬盘、NAS 或共享盘。
@@ -666,6 +670,7 @@ notepad .env
 F:\kb-data\kb.sqlite3
 F:\kb-data\uploads\
 F:\kb-data\processed\
+F:\kb-data\work-guides\
 ```
 
 进入项目目录：

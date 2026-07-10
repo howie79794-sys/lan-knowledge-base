@@ -8,6 +8,7 @@ from app.modules.agent.router import router as agent_router
 from app.modules.documents.router import router as documents_router
 from app.modules.parse_jobs.router import router as parse_jobs_router
 from app.modules.wiki.router import router as wiki_router
+from app.modules.work_guides.router import router as work_guides_router
 
 
 def create_app() -> FastAPI:
@@ -29,6 +30,7 @@ def create_app() -> FastAPI:
     app.include_router(parse_jobs_router)
     app.include_router(agent_router)
     app.include_router(wiki_router)
+    app.include_router(work_guides_router)
 
     @app.get("/api/v1/health", tags=["system"])
     def health():
