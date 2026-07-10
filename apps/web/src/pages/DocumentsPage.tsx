@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Copy, Download, FileText, Folder, FolderPlus, ListPlus, MoveRight, RefreshCcw, Trash2, UploadCloud } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import type { Categories, DocumentDetail, DocumentSummary, FolderResponse } from "../api/client";
 import {
   createParseJobsBatch,
@@ -74,6 +74,8 @@ export function DocumentsPage({
   const [uploadMode, setUploadMode] = useState<"raw" | "markdown">("raw");
   const [markdownFiles, setMarkdownFiles] = useState<File[]>([]);
   const [markdownText, setMarkdownText] = useState("");
+  const [isListDropActive, setIsListDropActive] = useState(false);
+  const [isUploadDropActive, setIsUploadDropActive] = useState(false);
 
   const stats = useMemo(() => {
     return {
@@ -255,6 +257,75 @@ export function DocumentsPage({
     } finally {
       setUploading(false);
     }
+  }
+
+  function selectRawFiles(nextFiles: File[], fromList = false) {
+    if (!nextFiles.length) return;
+    setUploadMode("raw");
+    setFiles(nextFiles);
+    if (!title && nextFiles.length === 1) setTitle(nextFiles[0].name.replace(/\.[^.]+$/, ""));
+    if (fromList) {
+      setMessage(`已选择 ${nextFiles.length} 个文件，将上传到当前路径 ${currentFolder}。请在右侧确认信息后点击上传。`);
+    }
+  }
+
+  function selectMarkdownFiles(nextFiles: File[]) {
+    const invalidFiles = nextFiles.filter((file) => !isMarkdownFile(file.name));
+    if (invalidFiles.length) {
+      setMessage(`Markdown 知识仅支持 .md 或 .markdown 文件：${invalidFiles.map((file) => file.name).join("、")}`);
+      return;
+    }
+    setMarkdownFiles(nextFiles);
+    if (!title && nextFiles.length === 1) setTitle(nextFiles[0].name.replace(/\.[^.]+$/, ""));
+  }
+
+  function isFileDrag(event: DragEvent<HTMLElement>) {
+    return Array.from(event.dataTransfer.types).includes("Files");
+  }
+
+  function handleListDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsListDropActive(true);
+  }
+
+  function handleListDragLeave(event: DragEvent<HTMLDivElement>) {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setIsListDropActive(false);
+  }
+
+  function handleListDrop(event: DragEvent<HTMLDivElement>) {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    setIsListDropActive(false);
+    selectRawFiles(Array.from(event.dataTransfer.files), true);
+  }
+
+  function handleUploadDragOver(event: DragEvent<HTMLLabelElement>) {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsUploadDropActive(true);
+  }
+
+  function handleUploadDragLeave(event: DragEvent<HTMLLabelElement>) {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setIsUploadDropActive(false);
+  }
+
+  function handleRawUploadDrop(event: DragEvent<HTMLLabelElement>) {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    setIsUploadDropActive(false);
+    selectRawFiles(Array.from(event.dataTransfer.files));
+  }
+
+  function handleMarkdownUploadDrop(event: DragEvent<HTMLLabelElement>) {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    setIsUploadDropActive(false);
+    selectMarkdownFiles(Array.from(event.dataTransfer.files));
   }
 
   async function handleMarkdownImport() {
@@ -562,7 +633,19 @@ export function DocumentsPage({
       />
 
       <div className="documentLayout">
-        <div className="listPane">
+        <div
+          className={isListDropActive ? "listPane listDropActive" : "listPane"}
+          onDragOver={handleListDragOver}
+          onDragLeave={handleListDragLeave}
+          onDrop={handleListDrop}
+        >
+          {isListDropActive && (
+            <div className="listDropHint" aria-live="polite">
+              <UploadCloud size={28} />
+              <strong>松开即可选择文件</strong>
+              <span>将上传到当前路径 {currentFolder}</span>
+            </div>
+          )}
           <div className="listToolbar">
             <div className="listToolbarMeta">
               <strong>{totalDocuments ? `${pageStart}-${pageEnd}` : "0"} / {totalDocuments}</strong>
@@ -646,34 +729,40 @@ export function DocumentsPage({
               </button>
             </div>
             {uploadMode === "raw" ? (
-              <label className="dropzone compactDropzone">
+              <label
+                className={isUploadDropActive ? "dropzone compactDropzone dropzoneActive" : "dropzone compactDropzone"}
+                onDragOver={handleUploadDragOver}
+                onDragLeave={handleUploadDragLeave}
+                onDrop={handleRawUploadDrop}
+              >
                 <UploadCloud size={28} />
-                <span>{files.length ? selectedFileLabel(files) : "选择文件（可多选）"}</span>
+                <span>{files.length ? selectedFileLabel(files) : "选择或拖入文件（可多选）"}</span>
                 <small>上传后先保存为原始文件，批量上传默认使用各自文件名</small>
                 <input
                   type="file"
                   multiple
                   onChange={(event) => {
-                    const nextFiles = Array.from(event.target.files ?? []);
-                    setFiles(nextFiles);
-                    if (!title && nextFiles.length === 1) setTitle(nextFiles[0].name.replace(/\.[^.]+$/, ""));
+                    selectRawFiles(Array.from(event.target.files ?? []));
                   }}
                 />
               </label>
             ) : (
               <div className="markdownImportBox">
-                <label className="dropzone compactDropzone">
+                <label
+                  className={isUploadDropActive ? "dropzone compactDropzone dropzoneActive" : "dropzone compactDropzone"}
+                  onDragOver={handleUploadDragOver}
+                  onDragLeave={handleUploadDragLeave}
+                  onDrop={handleMarkdownUploadDrop}
+                >
                   <FileText size={28} />
-                  <span>{markdownFiles.length ? selectedFileLabel(markdownFiles) : "选择 Markdown 文件（可多选）"}</span>
+                  <span>{markdownFiles.length ? selectedFileLabel(markdownFiles) : "选择或拖入 Markdown 文件（可多选）"}</span>
                   <small>仅支持 .md / .markdown，导入后直接进入已解析状态</small>
                   <input
                     type="file"
                     accept=".md,.markdown,text/markdown"
                     multiple
                     onChange={(event) => {
-                      const nextFiles = Array.from(event.target.files ?? []);
-                      setMarkdownFiles(nextFiles);
-                      if (!title && nextFiles.length === 1) setTitle(nextFiles[0].name.replace(/\.[^.]+$/, ""));
+                      selectMarkdownFiles(Array.from(event.target.files ?? []));
                     }}
                   />
                 </label>

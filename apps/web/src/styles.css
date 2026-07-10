@@ -468,6 +468,39 @@ input {
   box-shadow: var(--shadow-soft);
 }
 
+.listPane {
+  position: relative;
+}
+
+.listPane.listDropActive {
+  border-color: var(--accent);
+}
+
+.listDropHint {
+  position: absolute;
+  z-index: 8;
+  inset: 8px;
+  display: grid;
+  place-content: center;
+  gap: 7px;
+  text-align: center;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 2px dashed var(--accent);
+  border-radius: 9px;
+  pointer-events: none;
+}
+
+.listDropHint strong {
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.listDropHint span {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
 .sidePanelStack {
   display: grid;
   gap: 16px;
@@ -1262,6 +1295,12 @@ pre {
 .dropzone:hover {
   background: var(--surface-soft);
   border-color: var(--line-strong);
+}
+
+.dropzone.dropzoneActive {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .dropzone input {

@@ -1,5 +1,5 @@
 import { UploadCloud } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type DragEvent } from "react";
 import type { Categories } from "../api/client";
 import { fetchDuplicateDocuments, uploadDocument } from "../api/client";
 
@@ -13,6 +13,7 @@ export function UploadPage({ categories, onUploaded }: { categories: Categories 
   const [source, setSource] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [isDropActive, setIsDropActive] = useState(false);
 
   useEffect(() => {
     if (purpose) setFolderPath((current) => (current === "/" || !current ? `/${purpose}` : current));
@@ -56,6 +57,34 @@ export function UploadPage({ categories, onUploaded }: { categories: Categories 
     }
   }
 
+  function selectFile(nextFile: File | null) {
+    setFile(nextFile);
+    if (!title && nextFile) setTitle(nextFile.name.replace(/\.[^.]+$/, ""));
+  }
+
+  function isFileDrag(event: DragEvent<HTMLElement>) {
+    return Array.from(event.dataTransfer.types).includes("Files");
+  }
+
+  function handleDragOver(event: DragEvent<HTMLLabelElement>) {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsDropActive(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLLabelElement>) {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setIsDropActive(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLLabelElement>) {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    setIsDropActive(false);
+    selectFile(event.dataTransfer.files[0] ?? null);
+  }
+
   return (
     <section className="workspace">
       <div className="sectionHeader">
@@ -65,15 +94,19 @@ export function UploadPage({ categories, onUploaded }: { categories: Categories 
         </div>
       </div>
       <div className="uploadLayout">
-        <label className="dropzone">
+        <label
+          className={isDropActive ? "dropzone dropzoneActive" : "dropzone"}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           <UploadCloud size={32} />
           <span>{file ? file.name : "选择或拖入文件"}</span>
           <small>支持 PDF、Word、PPT、Excel、CSV、Markdown、文本</small>
           <input
             type="file"
             onChange={(event) => {
-              setFile(event.target.files?.[0] ?? null);
-              if (!title && event.target.files?.[0]) setTitle(event.target.files[0].name.replace(/\.[^.]+$/, ""));
+              selectFile(event.target.files?.[0] ?? null);
             }}
           />
         </label>
