@@ -4,6 +4,7 @@ export type DocumentSummary = {
   original_filename: string;
   file_format: string;
   file_ext: string;
+  source_kind?: "file" | "direct_markdown" | "markdown_bundle" | string;
   folder_path: string;
   size_bytes: number;
   status: "uploaded" | "queued" | "processing" | "ready" | "failed" | "deleted";
@@ -58,6 +59,8 @@ export type ParseQueueItem = {
   title: string;
   original_filename: string;
   file_format: string;
+  source_kind?: string;
+  job_type?: string | null;
   folder_path: string;
   purpose: string;
   size_bytes: number;
@@ -288,6 +291,20 @@ export async function uploadDocument(formData: FormData) {
 
 export async function importMarkdownKnowledge(formData: FormData) {
   return request<{ id: string; status: string }>("/api/v1/knowledge/import-markdown", {
+    method: "POST",
+    body: formData
+  });
+}
+
+export async function importMarkdownBundle(formData: FormData) {
+  return request<{
+    bundle_id: string;
+    document_ids: string[];
+    documents: number;
+    image_references: number;
+    missing_references: { document: string; reference: string }[];
+    folder_path: string;
+  }>("/api/v1/knowledge/import-markdown-bundle", {
     method: "POST",
     body: formData
   });

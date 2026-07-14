@@ -8,6 +8,7 @@
 - 工作指引直接读取数据目录中的 Markdown，动态汇总分类并展示同目录图片。
 - React + Vite 前端，FastAPI 后端，SQLite 元数据，本地目录存储原文件和解析产物。
 - 支持 PDF、PPT、Excel、Word、CSV、Markdown、Text 等办公资料上传。
+- 支持导入保留 `images/` 的 Markdown ZIP 文档包；图片理解由 Agent 在既有解析队列中完成。
 - 支持按知识分类建立文件夹、进入子文件夹、新建/删除空文件夹。
 - 支持原始文件列表、搜索、格式筛选、状态筛选、分页、详情、下载。
 - 支持单个或多个原始文件快速移动到目标文件夹路径。
@@ -95,6 +96,8 @@ http://台式机局域网IP:18080
 6. Qoder Work 调用 /api/v1/parse-jobs/{job_id}/complete 回写结果
 7. 网站更新文件状态为 ready，知识管理页可读取正文
 ```
+
+Markdown 文档包会使用同一个队列，但工作项的 `job_type` 为 `markdown_bundle`，并提供图片清单地址。详细的 Agent 处理和回写格式见 [Markdown 文档包图片增强解析说明](docs/markdown-bundle-agent-guide.md)。
 
 核心接口：
 

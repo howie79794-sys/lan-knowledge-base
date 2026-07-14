@@ -22,6 +22,7 @@ def job_to_summary(row) -> dict:
         "document_id": row["document_id"],
         "status": row["status"],
         "worker": row["worker"],
+        "job_type": row["job_type"] if "job_type" in row.keys() else "standard",
         "attempts": row["attempts"],
         "requested_by": row["requested_by"],
         "error_message": row["error_message"],
@@ -51,14 +52,15 @@ def create_parse_job(document_id: str, requested_by: str | None = None) -> dict:
 
         job_id = f"job_{uuid4().hex}"
         now = utc_now()
+        job_type = "markdown_bundle" if doc.get("source_kind") == "markdown_bundle" else "standard"
         conn.execute(
             """
             INSERT INTO parse_jobs (
-                id, document_id, status, attempts, requested_by, created_at, updated_at
+                id, document_id, status, attempts, requested_by, job_type, created_at, updated_at
             )
-            VALUES (?, ?, 'queued', 0, ?, ?, ?)
+            VALUES (?, ?, 'queued', 0, ?, ?, ?, ?)
             """,
-            (job_id, document_id, requested_by, now, now),
+            (job_id, document_id, requested_by, job_type, now, now),
         )
         conn.execute(
             """
@@ -129,10 +131,10 @@ def list_parse_queue(limit: int = 200, offset: int = 0) -> dict:
         ).fetchone()["count"]
         rows = conn.execute(
             """
-            SELECT d.id AS document_id, d.title, d.original_filename, d.file_format,
+            SELECT d.id AS document_id, d.title, d.original_filename, d.file_format, d.source_kind,
                    d.folder_path, d.size_bytes, d.status AS document_status,
                    d.updated_at AS document_updated_at, m.purpose,
-                   j.id AS job_id, j.status AS job_status, j.worker, j.attempts,
+                   j.id AS job_id, j.status AS job_status, j.worker, j.job_type, j.attempts,
                    j.error_message, j.updated_at AS job_updated_at
             FROM documents d
             JOIN document_metadata m ON m.document_id = d.id
@@ -164,6 +166,8 @@ def list_parse_queue(limit: int = 200, offset: int = 0) -> dict:
                 "title": row["title"],
                 "original_filename": row["original_filename"],
                 "file_format": row["file_format"],
+                "source_kind": row["source_kind"],
+                "job_type": row["job_type"],
                 "folder_path": row["folder_path"],
                 "purpose": display_purpose(row["purpose"]),
                 "size_bytes": row["size_bytes"],
@@ -183,6 +187,7 @@ def list_parse_queue(limit: int = 200, offset: int = 0) -> dict:
 
 def work_item_to_response(row, worker_name: str, request: Request, now: str) -> dict:
     raw_path = raw_file_path(row["document_id"])
+    is_markdown_bundle = row["source_kind"] == "markdown_bundle"
     return {
         **job_to_summary(
             {
@@ -198,11 +203,19 @@ def work_item_to_response(row, worker_name: str, request: Request, now: str) -> 
         "original_filename": row["original_filename"],
         "file_format": row["file_format"],
         "file_ext": row["file_ext"],
+        "source_kind": row["source_kind"],
         "folder_path": row["folder_path"],
         "purpose": display_purpose(row["purpose"]),
         "size_bytes": row["size_bytes"],
         "raw_url": str(request.url_for("download_raw", document_id=row["document_id"])),
         "raw_path": str(raw_path),
+        "source_manifest_url": str(request.url_for("markdown_bundle_manifest", document_id=row["document_id"])) if is_markdown_bundle else None,
+        "output_requirement": (
+            "逐张读取 source_manifest_url 中 status=ready 的图片；将图片链接替换为 asset_url；"
+            "在原图片位置写入图片说明和 OCR 文字；在 metadata.images 回传每张图片的 source_ref、ocr_text、description、status。"
+            if is_markdown_bundle
+            else None
+        ),
     }
 
 
@@ -213,7 +226,7 @@ def claim_next_jobs(limit: int, worker: str | None, request: Request) -> list[di
     with db_session() as conn:
         rows = conn.execute(
             """
-            SELECT j.*, d.title, d.original_filename, d.file_format, d.file_ext,
+            SELECT j.*, d.title, d.original_filename, d.file_format, d.file_ext, d.source_kind,
                    d.folder_path, d.size_bytes, m.purpose
             FROM parse_jobs j
             JOIN documents d ON d.id = j.document_id
@@ -264,7 +277,7 @@ def claim_selected_jobs(job_ids: list[str], worker: str | None, request: Request
     with db_session() as conn:
         rows = conn.execute(
             f"""
-            SELECT j.*, d.title, d.original_filename, d.file_format, d.file_ext,
+            SELECT j.*, d.title, d.original_filename, d.file_format, d.file_ext, d.source_kind,
                    d.folder_path, d.size_bytes, d.status AS document_status, m.purpose
             FROM parse_jobs j
             JOIN documents d ON d.id = j.document_id
@@ -343,6 +356,11 @@ def complete_parse_job(job_id: str, markdown: str, text: str | None, metadata: d
     content_text = text if text is not None else markdown
     output_dir = Path(settings.processed_dir) / document_id
     output_dir.mkdir(parents=True, exist_ok=True)
+    image_records = None
+    if job["job_type"] == "markdown_bundle":
+        image_records = (metadata or {}).get("images", [])
+        if not isinstance(image_records, list):
+            raise HTTPException(status_code=400, detail="Markdown 文档包的 metadata.images 必须是数组。")
     (output_dir / "content.md").write_text(markdown, encoding="utf-8")
     (output_dir / "content.txt").write_text(content_text, encoding="utf-8")
     (output_dir / "metadata.json").write_text(
@@ -358,6 +376,12 @@ def complete_parse_job(job_id: str, markdown: str, text: str | None, metadata: d
         ),
         encoding="utf-8",
     )
+    if job["job_type"] == "markdown_bundle":
+        (output_dir / "enhanced.md").write_text(markdown, encoding="utf-8")
+        (output_dir / "images.json").write_text(
+            json.dumps(image_records or [], ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
     now = utc_now()
     with db_session() as conn:
@@ -376,6 +400,14 @@ def complete_parse_job(job_id: str, markdown: str, text: str | None, metadata: d
             """,
             (str(uuid4()), document_id, f"{document_id}/content.md", now),
         )
+        if job["job_type"] == "markdown_bundle":
+            conn.execute(
+                """
+                INSERT INTO processed_artifacts (id, document_id, artifact_type, path, parser, parse_status, created_at)
+                VALUES (?, ?, 'image_metadata', ?, 'qoder-work', 'ready', ?)
+                """,
+                (str(uuid4()), document_id, f"{document_id}/images.json", now),
+            )
         conn.execute(
             """
             UPDATE parse_jobs

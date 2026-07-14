@@ -12,6 +12,7 @@ from app.modules.documents.service import (
     create_folder,
     create_document,
     create_markdown_knowledge,
+    create_markdown_bundle,
     delete_folder,
     find_duplicate_documents,
     get_document,
@@ -20,6 +21,8 @@ from app.modules.documents.service import (
     list_documents,
     move_document,
     raw_file_path,
+    markdown_bundle_asset_path,
+    markdown_bundle_manifest,
     soft_delete_document,
 )
 from app.modules.parse_jobs.service import create_batch_parse_jobs, create_parse_job
@@ -89,6 +92,27 @@ def import_markdown_knowledge(
         ip=request.client.host if request.client else None,
     )
     return {"id": document_id, "status": "ready"}
+
+
+@router.post("/knowledge/import-markdown-bundle")
+def import_markdown_bundle(
+    request: Request,
+    file: UploadFile = File(...),
+    purpose: str = Form("业务知识"),
+    folder_path: str = Form("/"),
+    source: str | None = Form(None),
+    project: str | None = Form(None),
+    uploader_name: str | None = Form(None),
+    confidentiality: str = Form("internal"),
+):
+    result = create_markdown_bundle(file, purpose, folder_path, source, project, uploader_name, confidentiality)
+    write_audit(
+        "markdown_bundle_import",
+        actor=uploader_name,
+        ip=request.client.host if request.client else None,
+        message=f"bundle={result['bundle_id']}; documents={result['documents']}; missing={len(result['missing_references'])}",
+    )
+    return result
 
 
 @router.get("/documents", response_model=DocumentListResponse)
@@ -167,6 +191,17 @@ def knowledge(
 def download_raw(document_id: str, request: Request):
     doc = get_document(document_id)
     return FileResponse(raw_file_path(document_id), filename=doc["original_filename"])
+
+
+@router.get("/documents/{document_id}/source-manifest", name="markdown_bundle_manifest")
+def document_source_manifest(document_id: str):
+    return markdown_bundle_manifest(document_id)
+
+
+@router.get("/documents/{document_id}/assets/{asset_id}")
+def document_bundle_asset(document_id: str, asset_id: str):
+    path = markdown_bundle_asset_path(document_id, asset_id)
+    return FileResponse(path, media_type=None)
 
 
 @router.get("/documents/{document_id}/content")

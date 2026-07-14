@@ -7,6 +7,7 @@ AUDITED_ACTIONS = {
     "upload",
     "overwrite_upload",
     "markdown_import",
+    "markdown_bundle_import",
     "overwrite_markdown_import",
     "compile_wiki",
     "create_wiki_compile_jobs",

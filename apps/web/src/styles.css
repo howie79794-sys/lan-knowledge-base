@@ -1237,6 +1237,37 @@ pre {
   color: var(--ink-2);
 }
 
+.markdownPreview {
+  max-height: 480px;
+  overflow: auto;
+  padding: 14px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.markdownPreview > :first-child {
+  margin-top: 0;
+}
+
+.markdownPreview > :last-child {
+  margin-bottom: 0;
+}
+
+.markdownPreview img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 10px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.markdownPreview code {
+  overflow-wrap: anywhere;
+}
+
 .emptyState,
 .emptyDetail,
 .loadingLine,
@@ -1351,7 +1382,7 @@ pre {
 
 .uploadModeSwitch {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   border-radius: 10px;
@@ -1378,6 +1409,13 @@ pre {
 .markdownImportBox {
   display: grid;
   gap: 10px;
+}
+
+.uploadHelperText {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .markdownTextField {

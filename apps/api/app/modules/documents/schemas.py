@@ -7,6 +7,7 @@ class DocumentSummary(BaseModel):
     original_filename: str
     file_format: str
     file_ext: str
+    source_kind: str = "file"
     folder_path: str
     size_bytes: int
     status: str

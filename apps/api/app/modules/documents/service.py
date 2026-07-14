@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import mimetypes
 import shutil
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -358,6 +360,168 @@ def create_markdown_knowledge(
     return document_id
 
 
+def _safe_zip_member_path(name: str) -> Path:
+    candidate = Path(name.replace("\\", "/"))
+    if candidate.is_absolute() or any(part in {"", ".", ".."} for part in candidate.parts):
+        raise HTTPException(status_code=400, detail=f"压缩包包含不安全的文件路径：{name}")
+    return candidate
+
+
+def _markdown_image_references(markdown: str) -> list[str]:
+    import re
+
+    references: list[str] = []
+    for matched in re.finditer(r"!\[[^\]]*\]\((?:<([^>]+)>|([^\s)]+))(?:\s+[^)]*)?\)", markdown):
+        value = (matched.group(1) or matched.group(2) or "").strip()
+        if value and value not in references:
+            references.append(value)
+    return references
+
+
+def _bundle_asset_target(bundle_dir: Path, markdown_relative_path: Path, reference: str) -> Path | None:
+    if reference.startswith(("http://", "https://", "data:", "/")):
+        return None
+    relative = Path(reference.split("?", 1)[0].split("#", 1)[0].replace("\\", "/"))
+    target = (bundle_dir / markdown_relative_path.parent / relative).resolve()
+    if bundle_dir.resolve() not in target.parents and target != bundle_dir.resolve():
+        return None
+    return target
+
+
+def create_markdown_bundle(
+    file: UploadFile,
+    purpose: str,
+    folder_path: str | None,
+    source: str | None,
+    project: str | None,
+    uploader_name: str | None,
+    confidentiality: str,
+) -> dict:
+    filename = safe_filename(file.filename or "markdown-bundle.zip")
+    if Path(filename).suffix.lower() != ".zip":
+        raise HTTPException(status_code=400, detail="Markdown 文档包请上传 .zip 文件。")
+    content = read_upload_bytes(file)
+    canonical_purpose = normalize_purpose(purpose)
+    normalized_folder = ensure_purpose_folder_path(canonical_purpose, folder_path)
+    bundle_id = f"bundle_{uuid4().hex}"
+    bundle_relative_dir = Path("bundles") / bundle_id
+    bundle_dir = Path(settings.upload_dir) / bundle_relative_dir
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    archive_path = Path(settings.tmp_dir) / f"{bundle_id}.zip"
+    archive_path.write_bytes(content)
+
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            file_members = [member for member in archive.infolist() if not member.is_dir()]
+            if not file_members:
+                raise HTTPException(status_code=400, detail="压缩包中没有文件。")
+            total_uncompressed = sum(member.file_size for member in file_members)
+            max_uncompressed = settings.max_upload_mb * 1024 * 1024 * 8
+            if total_uncompressed > max_uncompressed:
+                raise HTTPException(status_code=400, detail="压缩包解压后的体积过大，请按模块拆分上传。")
+            for member in file_members:
+                relative = _safe_zip_member_path(member.filename)
+                target = bundle_dir / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(member) as source_handle, target.open("wb") as target_handle:
+                    shutil.copyfileobj(source_handle, target_handle)
+    except zipfile.BadZipFile as exc:
+        shutil.rmtree(bundle_dir, ignore_errors=True)
+        raise HTTPException(status_code=400, detail="上传文件不是有效的 ZIP 文档包。") from exc
+    finally:
+        archive_path.unlink(missing_ok=True)
+
+    markdown_paths = sorted(
+        path for path in bundle_dir.rglob("*") if path.is_file() and path.suffix.lower() in {".md", ".markdown"}
+    )
+    if not markdown_paths:
+        shutil.rmtree(bundle_dir, ignore_errors=True)
+        raise HTTPException(status_code=400, detail="压缩包中没有 .md 或 .markdown 文件。")
+
+    relative_markdown_paths = [path.relative_to(bundle_dir) for path in markdown_paths]
+    top_level_parts = {path.parts[0] for path in relative_markdown_paths if len(path.parts) > 1}
+    import_folder = normalized_folder
+    if len(top_level_parts) == 1 and all(len(path.parts) > 1 for path in relative_markdown_paths):
+        root_name = next(iter(top_level_parts))
+        if normalized_folder.rstrip("/").rsplit("/", 1)[-1] != root_name:
+            import_folder = ensure_purpose_folder_path(canonical_purpose, f"{normalized_folder}/{root_name}")
+
+    now = utc_now()
+    document_ids: list[str] = []
+    image_references = 0
+    missing_references: list[dict[str, str]] = []
+    with db_session() as conn:
+        insert_folder_paths(conn, canonical_purpose, import_folder)
+        for markdown_path in markdown_paths:
+            try:
+                markdown_text = markdown_path.read_text(encoding="utf-8-sig")
+            except UnicodeDecodeError as exc:
+                raise HTTPException(status_code=400, detail=f"Markdown 必须是 UTF-8：{markdown_path.name}") from exc
+            document_id = f"doc_{uuid4().hex}"
+            relative_markdown_path = markdown_path.relative_to(bundle_dir)
+            storage_path = bundle_relative_dir / relative_markdown_path
+            conn.execute(
+                """
+                INSERT INTO documents (
+                    id, title, original_filename, file_ext, file_format, mime_type, size_bytes,
+                    checksum_sha256, storage_path, source_kind, bundle_id, folder_path, status, created_at, updated_at
+                ) VALUES (?, ?, ?, 'md', 'markdown', 'text/markdown', ?, ?, ?, 'markdown_bundle', ?, ?, 'uploaded', ?, ?)
+                """,
+                (
+                    document_id,
+                    markdown_path.stem,
+                    markdown_path.name,
+                    markdown_path.stat().st_size,
+                    checksum_file(markdown_path),
+                    str(storage_path),
+                    bundle_id,
+                    import_folder,
+                    now,
+                    now,
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO document_metadata (document_id, purpose, source, project, confidentiality, uploader_name)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (document_id, canonical_purpose, source, project, confidentiality or "internal", uploader_name),
+            )
+            for reference in _markdown_image_references(markdown_text):
+                image_references += 1
+                target = _bundle_asset_target(bundle_dir, relative_markdown_path, reference)
+                exists = target is not None and target.is_file()
+                asset_relative = str(target.relative_to(bundle_dir.resolve())) if exists and target else None
+                conn.execute(
+                    """
+                    INSERT INTO markdown_bundle_assets (
+                        id, document_id, source_ref, asset_path, asset_sha256, mime_type, is_missing, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        f"asset_{uuid4().hex}",
+                        document_id,
+                        reference,
+                        asset_relative,
+                        checksum_file(target) if exists and target else None,
+                        mimetypes.guess_type(str(target))[0] if exists and target else None,
+                        0 if exists else 1,
+                        now,
+                    ),
+                )
+                if not exists:
+                    missing_references.append({"document": str(relative_markdown_path), "reference": reference})
+            document_ids.append(document_id)
+    return {
+        "bundle_id": bundle_id,
+        "document_ids": document_ids,
+        "documents": len(document_ids),
+        "image_references": image_references,
+        "missing_references": missing_references,
+        "folder_path": import_folder,
+    }
+
+
 def read_upload_bytes(file: UploadFile) -> bytes:
     max_bytes = settings.max_upload_mb * 1024 * 1024
     content = file.file.read(max_bytes + 1)
@@ -411,6 +575,7 @@ def row_to_summary(row) -> dict:
         "original_filename": row["original_filename"],
         "file_format": row["file_format"],
         "file_ext": row["file_ext"],
+        "source_kind": row["source_kind"] if "source_kind" in keys else "file",
         "folder_path": row["folder_path"],
         "size_bytes": row["size_bytes"],
         "status": row["status"],
@@ -661,21 +826,71 @@ def content_file_path(document_id: str) -> Path:
     return path
 
 
+def markdown_bundle_manifest(document_id: str) -> dict:
+    doc = get_document(document_id)
+    if doc.get("source_kind") != "markdown_bundle":
+        raise HTTPException(status_code=400, detail="该文件不是 Markdown 文档包。")
+    with db_session() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, source_ref, asset_path, asset_sha256, mime_type, is_missing
+            FROM markdown_bundle_assets WHERE document_id = ? ORDER BY source_ref ASC
+            """,
+            (document_id,),
+        ).fetchall()
+    return {
+        "document_id": document_id,
+        "source_kind": "markdown_bundle",
+        "markdown_url": f"/api/v1/documents/{document_id}/raw",
+        "assets": [
+            {
+                "id": row["id"],
+                "source_ref": row["source_ref"],
+                "sha256": row["asset_sha256"],
+                "mime_type": row["mime_type"],
+                "status": "missing" if row["is_missing"] else "ready",
+                "asset_url": None if row["is_missing"] else f"/api/v1/documents/{document_id}/assets/{row['id']}",
+            }
+            for row in rows
+        ],
+    }
+
+
+def markdown_bundle_asset_path(document_id: str, asset_id: str) -> Path:
+    doc = get_document(document_id)
+    if doc.get("source_kind") != "markdown_bundle":
+        raise HTTPException(status_code=404, detail="图片资源不存在。")
+    with db_session() as conn:
+        row = conn.execute(
+            "SELECT asset_path, is_missing FROM markdown_bundle_assets WHERE id = ? AND document_id = ?",
+            (asset_id, document_id),
+        ).fetchone()
+    if not row or row["is_missing"] or not row["asset_path"]:
+        raise HTTPException(status_code=404, detail="图片资源不存在。")
+    bundle_path = Path(settings.upload_dir) / "bundles" / str(doc["bundle_id"])
+    target = (bundle_path / row["asset_path"]).resolve()
+    if bundle_path.resolve() not in target.parents or not target.is_file():
+        raise HTTPException(status_code=404, detail="图片资源不存在。")
+    return target
+
+
 def soft_delete_document(document_id: str) -> None:
     doc = get_document(document_id)
     raw_path = Path(settings.upload_dir) / doc["storage_path"]
     processed_path = Path(settings.processed_dir) / document_id
 
-    if raw_path.parent.exists():
-        shutil.rmtree(raw_path.parent, ignore_errors=True)
-    elif raw_path.exists():
-        raw_path.unlink(missing_ok=True)
+    if doc.get("source_kind") != "markdown_bundle":
+        if raw_path.parent.exists():
+            shutil.rmtree(raw_path.parent, ignore_errors=True)
+        elif raw_path.exists():
+            raw_path.unlink(missing_ok=True)
     shutil.rmtree(processed_path, ignore_errors=True)
 
     now = utc_now()
     with db_session() as conn:
         conn.execute("DELETE FROM processed_artifacts WHERE document_id = ?", (document_id,))
         conn.execute("DELETE FROM parse_jobs WHERE document_id = ?", (document_id,))
+        conn.execute("DELETE FROM markdown_bundle_assets WHERE document_id = ?", (document_id,))
         conn.execute("DELETE FROM conversion_jobs WHERE document_id = ?", (document_id,))
         conn.execute("DELETE FROM wiki_pages WHERE source_document_id = ?", (document_id,))
         conn.execute(
@@ -690,3 +905,10 @@ def soft_delete_document(document_id: str) -> None:
             """,
             (now, document_id),
         )
+        if doc.get("source_kind") == "markdown_bundle" and doc.get("bundle_id"):
+            remaining = conn.execute(
+                "SELECT COUNT(*) AS count FROM documents WHERE bundle_id = ? AND status != 'deleted'",
+                (doc["bundle_id"],),
+            ).fetchone()["count"]
+            if not remaining:
+                shutil.rmtree(Path(settings.upload_dir) / "bundles" / doc["bundle_id"], ignore_errors=True)

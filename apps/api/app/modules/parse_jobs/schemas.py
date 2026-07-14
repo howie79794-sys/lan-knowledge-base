@@ -6,6 +6,7 @@ class ParseJobSummary(BaseModel):
     document_id: str
     status: str
     worker: str | None = None
+    job_type: str = "standard"
     attempts: int
     requested_by: str | None = None
     error_message: str | None = None
@@ -25,6 +26,9 @@ class ParseJobWorkItem(ParseJobSummary):
     size_bytes: int
     raw_url: str
     raw_path: str
+    source_kind: str = "file"
+    source_manifest_url: str | None = None
+    output_requirement: str | None = None
 
 
 class ParseQueueItem(BaseModel):
@@ -32,6 +36,8 @@ class ParseQueueItem(BaseModel):
     title: str
     original_filename: str
     file_format: str
+    source_kind: str = "file"
+    job_type: str | None = None
     folder_path: str
     purpose: str
     size_bytes: int

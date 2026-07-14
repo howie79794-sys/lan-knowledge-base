@@ -1,5 +1,7 @@
 import { ChevronLeft, ChevronRight, Copy, Database, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { DocumentSummary, FolderResponse } from "../api/client";
 import { fetchContent, fetchDocument, fetchFolder, fetchKnowledge, type DocumentDetail } from "../api/client";
 import { StatusBadge } from "../components/StatusBadge";
@@ -283,7 +285,9 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
               </div>
               <div className="contentPreview">
                 <div className="previewTitle">知识正文概览</div>
-                <pre>{content || detail.content_excerpt || "暂无可展示内容。"}</pre>
+                <div className="markdownPreview">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{content || detail.content_excerpt || "暂无可展示内容。"}</ReactMarkdown>
+                </div>
               </div>
             </>
           ) : (

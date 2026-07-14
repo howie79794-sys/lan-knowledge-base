@@ -41,6 +41,8 @@ def init_db() -> None:
                 size_bytes INTEGER NOT NULL,
                 checksum_sha256 TEXT NOT NULL,
                 storage_path TEXT NOT NULL,
+                source_kind TEXT NOT NULL DEFAULT 'file',
+                bundle_id TEXT,
                 folder_path TEXT NOT NULL DEFAULT '/',
                 status TEXT NOT NULL,
                 content_excerpt TEXT,
@@ -89,6 +91,7 @@ def init_db() -> None:
                 document_id TEXT NOT NULL,
                 status TEXT NOT NULL,
                 worker TEXT,
+                job_type TEXT NOT NULL DEFAULT 'standard',
                 attempts INTEGER NOT NULL DEFAULT 0,
                 requested_by TEXT,
                 error_message TEXT,
@@ -97,6 +100,19 @@ def init_db() -> None:
                 finished_at TEXT,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(document_id) REFERENCES documents(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS markdown_bundle_assets (
+                id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL,
+                source_ref TEXT NOT NULL,
+                asset_path TEXT,
+                asset_sha256 TEXT,
+                mime_type TEXT,
+                is_missing INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(document_id) REFERENCES documents(id),
+                UNIQUE(document_id, source_ref)
             );
 
             CREATE TABLE IF NOT EXISTS document_folders (
@@ -158,6 +174,8 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_metadata_purpose ON document_metadata(purpose);
             CREATE INDEX IF NOT EXISTS idx_parse_jobs_status ON parse_jobs(status);
             CREATE INDEX IF NOT EXISTS idx_parse_jobs_document ON parse_jobs(document_id);
+            CREATE INDEX IF NOT EXISTS idx_documents_bundle ON documents(bundle_id);
+            CREATE INDEX IF NOT EXISTS idx_markdown_bundle_assets_document ON markdown_bundle_assets(document_id);
             CREATE INDEX IF NOT EXISTS idx_document_folders_purpose ON document_folders(purpose);
             CREATE INDEX IF NOT EXISTS idx_document_folders_path ON document_folders(path);
             CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
@@ -171,7 +189,18 @@ def init_db() -> None:
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(documents)").fetchall()}
         if "folder_path" not in columns:
             conn.execute("ALTER TABLE documents ADD COLUMN folder_path TEXT NOT NULL DEFAULT '/'")
+        document_additions = {
+            "source_kind": "TEXT NOT NULL DEFAULT 'file'",
+            "bundle_id": "TEXT",
+        }
+        for name, definition in document_additions.items():
+            if name not in columns:
+                conn.execute(f"ALTER TABLE documents ADD COLUMN {name} {definition}")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_folder ON documents(folder_path)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_bundle ON documents(bundle_id)")
+        parse_job_columns = {row["name"] for row in conn.execute("PRAGMA table_info(parse_jobs)").fetchall()}
+        if "job_type" not in parse_job_columns:
+            conn.execute("ALTER TABLE parse_jobs ADD COLUMN job_type TEXT NOT NULL DEFAULT 'standard'")
         wiki_job_columns = {row["name"] for row in conn.execute("PRAGMA table_info(wiki_compile_jobs)").fetchall()}
         wiki_job_additions = {
             "job_type": "TEXT NOT NULL DEFAULT 'batch_local'",

@@ -1,5 +1,7 @@
 import { ChevronLeft, ChevronRight, Copy, Download, FileText, Folder, FolderPlus, ListPlus, MoveRight, RefreshCcw, Trash2, UploadCloud } from "lucide-react";
 import { useEffect, useMemo, useState, type DragEvent } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { Categories, DocumentDetail, DocumentSummary, FolderResponse } from "../api/client";
 import {
   createParseJobsBatch,
@@ -12,6 +14,7 @@ import {
   fetchDocuments,
   fetchFolder,
   importMarkdownKnowledge,
+  importMarkdownBundle,
   moveDocument,
   rawUrl,
   reprocessDocument,
@@ -71,9 +74,10 @@ export function DocumentsPage({
   const [project, setProject] = useState("");
   const [source, setSource] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [uploadMode, setUploadMode] = useState<"raw" | "markdown">("raw");
+  const [uploadMode, setUploadMode] = useState<"raw" | "markdown" | "bundle">("raw");
   const [markdownFiles, setMarkdownFiles] = useState<File[]>([]);
   const [markdownText, setMarkdownText] = useState("");
+  const [markdownBundle, setMarkdownBundle] = useState<File | null>(null);
   const [isListDropActive, setIsListDropActive] = useState(false);
   const [isUploadDropActive, setIsUploadDropActive] = useState(false);
 
@@ -279,6 +283,16 @@ export function DocumentsPage({
     if (!title && nextFiles.length === 1) setTitle(nextFiles[0].name.replace(/\.[^.]+$/, ""));
   }
 
+  function selectMarkdownBundle(nextFile: File | null) {
+    if (!nextFile) return;
+    if (!nextFile.name.toLowerCase().endsWith(".zip")) {
+      setMessage("Markdown 文档包请先压缩为 .zip 后上传。压缩包内应保留 .md 文件和 images 文件夹的原有结构。");
+      return;
+    }
+    setUploadMode("bundle");
+    setMarkdownBundle(nextFile);
+  }
+
   function isFileDrag(event: DragEvent<HTMLElement>) {
     return Array.from(event.dataTransfer.types).includes("Files");
   }
@@ -326,6 +340,13 @@ export function DocumentsPage({
     event.preventDefault();
     setIsUploadDropActive(false);
     selectMarkdownFiles(Array.from(event.dataTransfer.files));
+  }
+
+  function handleBundleUploadDrop(event: DragEvent<HTMLLabelElement>) {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    setIsUploadDropActive(false);
+    selectMarkdownBundle(event.dataTransfer.files[0] ?? null);
   }
 
   async function handleMarkdownImport() {
@@ -412,6 +433,45 @@ export function DocumentsPage({
       await loadDocuments(importedIds[importedIds.length - 1]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "导入 Markdown 知识失败。");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleMarkdownBundleImport() {
+    if (!markdownBundle) {
+      setMessage("请选择一个包含 Markdown 和图片目录的 ZIP 文档包。");
+      return;
+    }
+    setUploading(true);
+    setMessage("");
+    try {
+      const body = new FormData();
+      body.set("file", markdownBundle);
+      body.set("purpose", purpose);
+      body.set("folder_path", currentFolder);
+      body.set("uploader_name", uploader);
+      body.set("project", project);
+      body.set("source", source);
+      const result = await importMarkdownBundle(body);
+      setMarkdownBundle(null);
+      setTitle("");
+      const missing = result.missing_references.length;
+      const preview = result.missing_references
+        .slice(0, 3)
+        .map((item) => `${item.document} → ${item.reference}`)
+        .join("；");
+      setMessage(
+        `已导入 ${result.documents} 篇 Markdown、识别 ${result.image_references} 处图片引用，均处于未解析状态。` +
+          (result.folder_path !== currentFolder ? `已按压缩包根目录归入 ${result.folder_path}。` : "") +
+          (missing ? `其中 ${missing} 处图片未找到：${preview}${missing > 3 ? " 等" : ""}。` : "图片引用校验通过。") +
+          "请勾选文档并点击“入队”，由 Agent 完成图片增强解析。"
+      );
+      onUploaded();
+      await loadFolder();
+      await loadDocuments(result.document_ids[0]);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "导入 Markdown 文档包失败。");
     } finally {
       setUploading(false);
     }
@@ -723,7 +783,7 @@ export function DocumentsPage({
         <aside className="sidePanelStack">
           <div className="uploadCard">
             <div className="panelTitle">
-              <h3>{uploadMode === "raw" ? "上传材料" : "导入 Markdown 知识"}</h3>
+              <h3>{uploadMode === "raw" ? "上传材料" : uploadMode === "bundle" ? "导入 Markdown 文档包" : "导入 Markdown 知识"}</h3>
               <span>{purpose}</span>
             </div>
             <div className="uploadModeSwitch" role="tablist" aria-label="上传方式">
@@ -732,6 +792,9 @@ export function DocumentsPage({
               </button>
               <button className={uploadMode === "markdown" ? "active" : ""} onClick={() => setUploadMode("markdown")} type="button">
                 Markdown 知识
+              </button>
+              <button className={uploadMode === "bundle" ? "active" : ""} onClick={() => setUploadMode("bundle")} type="button">
+                Markdown 文档包
               </button>
             </div>
             {uploadMode === "raw" ? (
@@ -752,7 +815,7 @@ export function DocumentsPage({
                   }}
                 />
               </label>
-            ) : (
+            ) : uploadMode === "markdown" ? (
               <div className="markdownImportBox">
                 <label
                   className={isUploadDropActive ? "dropzone compactDropzone dropzoneActive" : "dropzone compactDropzone"}
@@ -782,6 +845,25 @@ export function DocumentsPage({
                   />
                 </label>
               </div>
+            ) : (
+              <div className="markdownImportBox">
+                <label
+                  className={isUploadDropActive ? "dropzone compactDropzone dropzoneActive" : "dropzone compactDropzone"}
+                  onDragOver={handleUploadDragOver}
+                  onDragLeave={handleUploadDragLeave}
+                  onDrop={handleBundleUploadDrop}
+                >
+                  <FileText size={28} />
+                  <span>{markdownBundle ? markdownBundle.name : "选择或拖入 Markdown 文档包 ZIP"}</span>
+                  <small>ZIP 内保留原有 .md 和 images/ 目录结构；导入后由 Agent 读取图片并生成增强知识</small>
+                  <input
+                    type="file"
+                    accept=".zip,application/zip,application/x-zip-compressed"
+                    onChange={(event) => selectMarkdownBundle(event.target.files?.[0] ?? null)}
+                  />
+                </label>
+                <p className="uploadHelperText">适用于本地社区文档。纯文本 Markdown 请使用上一项；不要把图片 Base64 写入 Markdown。</p>
+              </div>
             )}
             <div className="compactForm">
               <label>
@@ -808,9 +890,13 @@ export function DocumentsPage({
                 <button className="primaryButton" onClick={handleUpload} disabled={uploading}>
                   {uploading ? "上传中..." : files.length > 1 ? `上传 ${files.length} 个文件` : "上传到当前分类"}
                 </button>
-              ) : (
+              ) : uploadMode === "markdown" ? (
                 <button className="primaryButton" onClick={handleMarkdownImport} disabled={uploading}>
                   {uploading ? "导入中..." : markdownFiles.length > 1 ? `导入 ${markdownFiles.length} 条知识` : "导入为已解析知识"}
+                </button>
+              ) : (
+                <button className="primaryButton" onClick={handleMarkdownBundleImport} disabled={uploading}>
+                  {uploading ? "导入中..." : "导入并等待 Agent 解析"}
                 </button>
               )}
             </div>
@@ -840,6 +926,10 @@ export function DocumentsPage({
                   <div>
                     <dt>文件格式</dt>
                     <dd>{detail.file_format}</dd>
+                  </div>
+                  <div>
+                    <dt>导入方式</dt>
+                    <dd>{detail.source_kind === "markdown_bundle" ? "Markdown 文档包（含图片）" : "普通文件"}</dd>
                   </div>
                   <div>
                     <dt>项目/客户</dt>
@@ -879,7 +969,13 @@ export function DocumentsPage({
                 {detail.error_message && <div className="errorBox">{detail.error_message}</div>}
                 <div className="contentPreview">
                   <div className="previewTitle">解析内容预览</div>
-                  <pre>{content || "还没有解析。你可以在后台管理页创建解析任务，再由 Qoder Work 领取并回写结果。"}</pre>
+                  {content ? (
+                    <div className="markdownPreview">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    <pre>还没有解析。你可以在后台管理页创建解析任务，再由 Qoder Work 领取并回写结果。</pre>
+                  )}
                 </div>
               </>
             ) : (
