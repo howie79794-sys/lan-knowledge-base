@@ -506,6 +506,8 @@ input {
   gap: 16px;
   position: sticky;
   top: 24px;
+  align-content: start;
+  min-width: 0;
 }
 
 .tableWrap {
@@ -1356,6 +1358,8 @@ pre {
   padding: 14px;
   display: grid;
   gap: 12px;
+  align-content: start;
+  min-width: 0;
 }
 
 .panelTitle {
@@ -1388,16 +1392,26 @@ pre {
   border-radius: 10px;
   background: var(--surface-soft);
   border: 1px solid var(--line);
+  min-width: 0;
+  align-items: center;
 }
 
 .uploadModeSwitch button {
-  height: 34px;
+  min-width: 0;
+  min-height: 46px;
+  padding: 5px 6px;
+  display: grid;
+  place-items: center;
   border: 0;
   border-radius: 7px;
   background: transparent;
   color: var(--ink-2);
+  font-size: clamp(12px, 1.05vw, 14px);
+  line-height: 1.25;
   font-weight: 850;
   cursor: pointer;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .uploadModeSwitch button.active {

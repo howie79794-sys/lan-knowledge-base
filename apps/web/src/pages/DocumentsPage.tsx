@@ -787,13 +787,28 @@ export function DocumentsPage({
               <span>{purpose}</span>
             </div>
             <div className="uploadModeSwitch" role="tablist" aria-label="上传方式">
-              <button className={uploadMode === "raw" ? "active" : ""} onClick={() => setUploadMode("raw")} type="button">
+              <button
+                className={uploadMode === "raw" ? "active" : ""}
+                onClick={() => setUploadMode("raw")}
+                type="button"
+                title="原始文件"
+              >
                 原始文件
               </button>
-              <button className={uploadMode === "markdown" ? "active" : ""} onClick={() => setUploadMode("markdown")} type="button">
+              <button
+                className={uploadMode === "markdown" ? "active" : ""}
+                onClick={() => setUploadMode("markdown")}
+                type="button"
+                title="Markdown 知识"
+              >
                 Markdown 知识
               </button>
-              <button className={uploadMode === "bundle" ? "active" : ""} onClick={() => setUploadMode("bundle")} type="button">
+              <button
+                className={uploadMode === "bundle" ? "active" : ""}
+                onClick={() => setUploadMode("bundle")}
+                type="button"
+                title="Markdown 文档包"
+              >
                 Markdown 文档包
               </button>
             </div>

@@ -21,7 +21,17 @@ def verify_agent_token(authorization: str | None) -> None:
 @router.get("/manifest")
 def manifest(request: Request, authorization: str | None = Header(default=None)):
     verify_agent_token(authorization)
-    _, rows = list_documents(purpose=None, file_format=None, q=None, status="ready")
+    # list_documents intentionally pages at 100 records for the web UI.  The
+    # Agent manifest is a discovery endpoint, so it must aggregate every ready
+    # document instead of silently returning just the first page.
+    total, rows = list_documents(purpose=None, file_format=None, q=None, status="ready", limit=100, offset=0)
+    offset = len(rows)
+    while offset < total:
+        _, page = list_documents(purpose=None, file_format=None, q=None, status="ready", limit=100, offset=offset)
+        if not page:
+            break
+        rows.extend(page)
+        offset += len(page)
     base_url = str(request.base_url).rstrip("/")
     docs = []
     for row in rows:
