@@ -174,7 +174,6 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_metadata_purpose ON document_metadata(purpose);
             CREATE INDEX IF NOT EXISTS idx_parse_jobs_status ON parse_jobs(status);
             CREATE INDEX IF NOT EXISTS idx_parse_jobs_document ON parse_jobs(document_id);
-            CREATE INDEX IF NOT EXISTS idx_documents_bundle ON documents(bundle_id);
             CREATE INDEX IF NOT EXISTS idx_markdown_bundle_assets_document ON markdown_bundle_assets(document_id);
             CREATE INDEX IF NOT EXISTS idx_document_folders_purpose ON document_folders(purpose);
             CREATE INDEX IF NOT EXISTS idx_document_folders_path ON document_folders(path);
