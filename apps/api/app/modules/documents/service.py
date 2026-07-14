@@ -367,6 +367,26 @@ def _safe_zip_member_path(name: str) -> Path:
     return candidate
 
 
+def _zip_member_source_path(member: zipfile.ZipInfo) -> Path:
+    name = member.filename
+    if not member.flag_bits & 0x800:
+        try:
+            name = name.encode("cp437").decode("gb18030")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
+    return _safe_zip_member_path(name)
+
+
+def _read_markdown_text(path: Path, display_name: str) -> str:
+    content = path.read_bytes()
+    for encoding in ("utf-8-sig", "gb18030"):
+        try:
+            return content.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise HTTPException(status_code=400, detail=f"无法识别 Markdown 编码：{display_name}。请使用 UTF-8 或 GBK/GB18030。")
+
+
 def _short_storage_segment(segment: str, max_bytes: int = 180) -> str:
     if len(segment.encode("utf-8")) <= max_bytes:
         return segment
@@ -458,7 +478,7 @@ def create_markdown_bundle(
             max_uncompressed = settings.max_upload_mb * 1024 * 1024 * 8
             if total_uncompressed > max_uncompressed:
                 raise HTTPException(status_code=400, detail="压缩包解压后的体积过大，请按模块拆分上传。")
-            member_paths = [(member, _safe_zip_member_path(member.filename)) for member in file_members]
+            member_paths = [(member, _zip_member_source_path(member)) for member in file_members]
             source_to_storage_paths = {
                 source_path.as_posix(): _storage_zip_member_path(source_path) for _, source_path in member_paths
             }
@@ -503,10 +523,8 @@ def create_markdown_bundle(
     with db_session() as conn:
         insert_folder_paths(conn, canonical_purpose, import_folder)
         for markdown_path, source_markdown_path in markdown_paths:
-            try:
-                markdown_text = markdown_path.read_text(encoding="utf-8-sig")
-            except UnicodeDecodeError as exc:
-                raise HTTPException(status_code=400, detail=f"Markdown 必须是 UTF-8：{markdown_path.name}") from exc
+            markdown_text = _read_markdown_text(markdown_path, source_markdown_path.name)
+            markdown_path.write_text(markdown_text, encoding="utf-8")
             document_id = f"doc_{uuid4().hex}"
             storage_markdown_path = source_to_storage_paths[source_markdown_path.as_posix()]
             storage_path = bundle_relative_dir / storage_markdown_path
