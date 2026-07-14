@@ -371,10 +371,25 @@ def _zip_member_source_path(member: zipfile.ZipInfo) -> Path:
     name = member.filename
     if not member.flag_bits & 0x800:
         try:
-            name = name.encode("cp437").decode("gb18030")
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            pass
+            raw_name = name.encode("cp437")
+        except UnicodeEncodeError:
+            raw_name = None
+        if raw_name is not None:
+            for encoding in ("utf-8", "gb18030"):
+                try:
+                    name = raw_name.decode(encoding)
+                    break
+                except UnicodeDecodeError:
+                    continue
     return _safe_zip_member_path(name)
+
+
+def _is_ignored_zip_metadata(path: Path) -> bool:
+    return (
+        "__MACOSX" in path.parts
+        or path.name.startswith("._")
+        or path.name in {".DS_Store", "Thumbs.db", "desktop.ini"}
+    )
 
 
 def _read_markdown_text(path: Path, display_name: str) -> str:
@@ -471,14 +486,18 @@ def create_markdown_bundle(
 
     try:
         with zipfile.ZipFile(archive_path) as archive:
-            file_members = [member for member in archive.infolist() if not member.is_dir()]
-            if not file_members:
+            member_paths = [
+                (member, _zip_member_source_path(member))
+                for member in archive.infolist()
+                if not member.is_dir()
+            ]
+            member_paths = [(member, path) for member, path in member_paths if not _is_ignored_zip_metadata(path)]
+            if not member_paths:
                 raise HTTPException(status_code=400, detail="压缩包中没有文件。")
-            total_uncompressed = sum(member.file_size for member in file_members)
+            total_uncompressed = sum(member.file_size for member, _ in member_paths)
             max_uncompressed = settings.max_upload_mb * 1024 * 1024 * 8
             if total_uncompressed > max_uncompressed:
                 raise HTTPException(status_code=400, detail="压缩包解压后的体积过大，请按模块拆分上传。")
-            member_paths = [(member, _zip_member_source_path(member)) for member in file_members]
             source_to_storage_paths = {
                 source_path.as_posix(): _storage_zip_member_path(source_path) for _, source_path in member_paths
             }
