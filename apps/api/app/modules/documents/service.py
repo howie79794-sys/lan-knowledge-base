@@ -367,6 +367,26 @@ def _safe_zip_member_path(name: str) -> Path:
     return candidate
 
 
+def _short_storage_segment(segment: str, max_bytes: int = 180) -> str:
+    if len(segment.encode("utf-8")) <= max_bytes:
+        return segment
+    suffix = Path(segment).suffix
+    if len(suffix.encode("utf-8")) > 32:
+        suffix = ""
+    digest = hashlib.sha256(segment.encode("utf-8")).hexdigest()[:16]
+    remaining = max_bytes - len(suffix.encode("utf-8")) - len(digest) - 1
+    shortened = ""
+    for char in Path(segment).stem:
+        if len((shortened + char).encode("utf-8")) > remaining:
+            break
+        shortened += char
+    return f"{shortened or 'asset'}-{digest}{suffix}"
+
+
+def _storage_zip_member_path(member_path: Path) -> Path:
+    return Path(*(_short_storage_segment(part) for part in member_path.parts))
+
+
 def _markdown_image_references(markdown: str) -> list[str]:
     import re
 
@@ -378,11 +398,30 @@ def _markdown_image_references(markdown: str) -> list[str]:
     return references
 
 
-def _bundle_asset_target(bundle_dir: Path, markdown_relative_path: Path, reference: str) -> Path | None:
+def _bundle_asset_target(
+    bundle_dir: Path,
+    markdown_relative_path: Path,
+    reference: str,
+    source_to_storage_paths: dict[str, Path],
+) -> Path | None:
     if reference.startswith(("http://", "https://", "data:", "/")):
         return None
     relative = Path(reference.split("?", 1)[0].split("#", 1)[0].replace("\\", "/"))
-    target = (bundle_dir / markdown_relative_path.parent / relative).resolve()
+    parts: list[str] = []
+    for part in [*markdown_relative_path.parent.parts, *relative.parts]:
+        if part in {"", "."}:
+            continue
+        if part == "..":
+            if not parts:
+                return None
+            parts.pop()
+            continue
+        parts.append(part)
+    source_target = Path(*parts)
+    storage_target = source_to_storage_paths.get(source_target.as_posix())
+    if not storage_target:
+        return None
+    target = (bundle_dir / storage_target).resolve()
     if bundle_dir.resolve() not in target.parents and target != bundle_dir.resolve():
         return None
     return target
@@ -419,26 +458,37 @@ def create_markdown_bundle(
             max_uncompressed = settings.max_upload_mb * 1024 * 1024 * 8
             if total_uncompressed > max_uncompressed:
                 raise HTTPException(status_code=400, detail="压缩包解压后的体积过大，请按模块拆分上传。")
-            for member in file_members:
-                relative = _safe_zip_member_path(member.filename)
-                target = bundle_dir / relative
+            member_paths = [(member, _safe_zip_member_path(member.filename)) for member in file_members]
+            source_to_storage_paths = {
+                source_path.as_posix(): _storage_zip_member_path(source_path) for _, source_path in member_paths
+            }
+            for member, source_path in member_paths:
+                target = bundle_dir / source_to_storage_paths[source_path.as_posix()]
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with archive.open(member) as source_handle, target.open("wb") as target_handle:
                     shutil.copyfileobj(source_handle, target_handle)
     except zipfile.BadZipFile as exc:
         shutil.rmtree(bundle_dir, ignore_errors=True)
         raise HTTPException(status_code=400, detail="上传文件不是有效的 ZIP 文档包。") from exc
+    except OSError as exc:
+        shutil.rmtree(bundle_dir, ignore_errors=True)
+        raise HTTPException(status_code=400, detail=f"无法解压 ZIP 文档包：{exc}") from exc
     finally:
         archive_path.unlink(missing_ok=True)
 
     markdown_paths = sorted(
-        path for path in bundle_dir.rglob("*") if path.is_file() and path.suffix.lower() in {".md", ".markdown"}
+        (
+            (bundle_dir / source_to_storage_paths[source_path.as_posix()], source_path)
+            for _, source_path in member_paths
+            if source_path.suffix.lower() in {".md", ".markdown"}
+        ),
+        key=lambda item: item[1].as_posix(),
     )
     if not markdown_paths:
         shutil.rmtree(bundle_dir, ignore_errors=True)
         raise HTTPException(status_code=400, detail="压缩包中没有 .md 或 .markdown 文件。")
 
-    relative_markdown_paths = [path.relative_to(bundle_dir) for path in markdown_paths]
+    relative_markdown_paths = [source_path for _, source_path in markdown_paths]
     top_level_parts = {path.parts[0] for path in relative_markdown_paths if len(path.parts) > 1}
     import_folder = normalized_folder
     if len(top_level_parts) == 1 and all(len(path.parts) > 1 for path in relative_markdown_paths):
@@ -452,14 +502,14 @@ def create_markdown_bundle(
     missing_references: list[dict[str, str]] = []
     with db_session() as conn:
         insert_folder_paths(conn, canonical_purpose, import_folder)
-        for markdown_path in markdown_paths:
+        for markdown_path, source_markdown_path in markdown_paths:
             try:
                 markdown_text = markdown_path.read_text(encoding="utf-8-sig")
             except UnicodeDecodeError as exc:
                 raise HTTPException(status_code=400, detail=f"Markdown 必须是 UTF-8：{markdown_path.name}") from exc
             document_id = f"doc_{uuid4().hex}"
-            relative_markdown_path = markdown_path.relative_to(bundle_dir)
-            storage_path = bundle_relative_dir / relative_markdown_path
+            storage_markdown_path = source_to_storage_paths[source_markdown_path.as_posix()]
+            storage_path = bundle_relative_dir / storage_markdown_path
             conn.execute(
                 """
                 INSERT INTO documents (
@@ -469,8 +519,8 @@ def create_markdown_bundle(
                 """,
                 (
                     document_id,
-                    markdown_path.stem,
-                    markdown_path.name,
+                    source_markdown_path.stem,
+                    source_markdown_path.name,
                     markdown_path.stat().st_size,
                     checksum_file(markdown_path),
                     str(storage_path),
@@ -489,7 +539,7 @@ def create_markdown_bundle(
             )
             for reference in _markdown_image_references(markdown_text):
                 image_references += 1
-                target = _bundle_asset_target(bundle_dir, relative_markdown_path, reference)
+                target = _bundle_asset_target(bundle_dir, source_markdown_path, reference, source_to_storage_paths)
                 exists = target is not None and target.is_file()
                 asset_relative = str(target.relative_to(bundle_dir.resolve())) if exists and target else None
                 conn.execute(
@@ -510,7 +560,7 @@ def create_markdown_bundle(
                     ),
                 )
                 if not exists:
-                    missing_references.append({"document": str(relative_markdown_path), "reference": reference})
+                    missing_references.append({"document": str(source_markdown_path), "reference": reference})
             document_ids.append(document_id)
     return {
         "bundle_id": bundle_id,
