@@ -44,7 +44,7 @@ export function DocumentTable({
   const allVisibleSelected = documents.length > 0 && documents.every((doc) => selectedIdSet.has(doc.id));
 
   return (
-    <div className="tableWrap">
+    <div className="tableWrap rawTableWrap">
       <table className="documentTable">
         <thead>
           <tr>

@@ -175,31 +175,14 @@ export function App() {
             )}
           </div>
         </nav>
-        <div className="agentBox">
-          <div className="agentBoxHeader">
-            <span>Agent 接入</span>
-            <button className="agentTextButton" onClick={() => setShowAgentGuide(true)}>
-              查看说明
-            </button>
-          </div>
-          <p>给其他 Agent 读取知识，给 Qoder Work 领取解析任务并回写结果。</p>
-          <code>/api/v1/wiki/index</code>
-          <code>/api/v1/wiki/context</code>
-          <code>/api/v1/wiki/compile-jobs/queue</code>
-          <code>/api/v1/manifest</code>
-          <code>/api/v1/parse-jobs/next</code>
-          <div className="agentQuickActions">
-            <button onClick={() => copyAgentGuide("read")}>
-              <Clipboard size={14} />
-              复制读取说明
-            </button>
-            <button onClick={() => copyAgentGuide("parse")}>
-              <Clipboard size={14} />
-              复制解析说明
-            </button>
-          </div>
-          {agentMessage && <small>{agentMessage}</small>}
-        </div>
+        <button className="agentLauncher" onClick={() => setShowAgentGuide(true)}>
+          <Clipboard size={17} />
+          <span>
+            <strong>Agent 接入</strong>
+            <small>查看接口说明与复制指引</small>
+          </span>
+          <ChevronDown size={17} />
+        </button>
       </aside>
       <main className="mainArea">
         {view === "raw" && (
@@ -226,6 +209,7 @@ export function App() {
                 <X size={17} />
               </button>
             </div>
+            {agentMessage && <div className="agentGuideNotice" role="status">{agentMessage}</div>}
             <div className="agentGuideGrid">
               <section className="agentGuideCard">
                 <div className="agentGuideTop">
