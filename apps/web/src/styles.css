@@ -425,14 +425,14 @@ input {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 400px;
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .knowledgeLayout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 430px;
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .listPane,
@@ -455,6 +455,9 @@ input {
 
 .listPane {
   position: relative;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .listPane.listDropActive {
@@ -797,12 +800,15 @@ input {
 
 .knowledgeList {
   overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .rawTableWrap,
 .knowledgeTableWrap {
-  max-height: calc(100vh - 330px);
-  min-height: 360px;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .rawTableWrap {
@@ -2378,6 +2384,22 @@ pre {
   .detailPane,
   .sidePanelStack {
     position: static;
+  }
+
+  .documentLayout,
+  .knowledgeLayout {
+    align-items: start;
+  }
+
+  .listPane,
+  .knowledgeList {
+    display: block;
+  }
+
+  .rawTableWrap,
+  .knowledgeTableWrap {
+    min-height: 360px;
+    max-height: calc(100vh - 330px);
   }
 
   .guideDetailLayout {
