@@ -331,7 +331,14 @@ def smart_job_to_work_item(row, worker_name: str, request, now: str) -> dict:
     }
 
 
-def complete_smart_compile_job(job_id: str, summary: str, content: str | None, keywords: list[str] | None, worker: str | None) -> dict:
+def complete_smart_compile_job(
+    job_id: str,
+    summary: str,
+    content: str | None,
+    keywords: list[str] | None,
+    worker: str | None,
+    refresh_overview: bool = True,
+) -> dict:
     with db_session() as conn:
         job = conn.execute("SELECT * FROM wiki_compile_jobs WHERE id = ?", (job_id,)).fetchone()
     if not job:
@@ -351,7 +358,8 @@ def complete_smart_compile_job(job_id: str, summary: str, content: str | None, k
         content=(content or "").strip(),
         keywords=keywords or extract_keywords(markdown, doc["title"], doc["purpose"]),
     )
-    refresh_category_overview(doc["purpose"])
+    if refresh_overview:
+        refresh_category_overview(doc["purpose"])
     now = utc_now()
     with db_session() as conn:
         conn.execute(
@@ -684,32 +692,23 @@ def get_wiki_page(page_id: str) -> dict:
     return page_to_dict(row)
 
 
-def wiki_context(query: str, purpose: str | None = None, limit: int = 8) -> dict:
+def wiki_context(query: str, purpose: str | None = None, limit: int = 8, include_content: bool = True) -> dict:
     needle = query.strip()
     if not needle:
         return {"query": query, "pages": [], "sources": []}
-    canonical_purpose = purpose if purpose in DOCUMENT_PURPOSES else None
+    if purpose and purpose not in DOCUMENT_PURPOSES:
+        raise HTTPException(status_code=400, detail="知识分类不在允许范围内。")
+    canonical_purpose = purpose
     safe_limit = min(max(limit, 1), 20)
     with db_session() as conn:
-        params: list[object] = []
-        filters = ["w.status = 'ready'"]
-        if canonical_purpose:
-            values = purpose_filter_values(canonical_purpose)
-            filters.append(f"w.purpose IN ({','.join('?' for _ in values)})")
-            params.extend(values)
-        where_clause = " AND ".join(filters)
-        rows = conn.execute(
-            f"""
-            SELECT w.*, d.original_filename, d.file_format, d.folder_path, d.size_bytes
-            FROM wiki_pages w
-            LEFT JOIN documents d ON d.id = w.source_document_id
-            WHERE {where_clause}
-            """,
-            params,
-        ).fetchall()
-    scored = sorted((score_page(dict(row), needle), dict(row)) for row in rows)
-    selected = [row for score, row in scored if score < 0][:safe_limit]
-    pages = [page_to_dict(row) for row in selected]
+        rows = find_wiki_context_candidates(conn, needle, canonical_purpose, safe_limit)
+    scored = sorted(
+        ((relevance_score(dict(row), needle), dict(row)) for row in rows),
+        key=context_sort_key,
+        reverse=False,
+    )
+    selected = [row for score, row in scored if score > 0][:safe_limit]
+    pages = [context_page_to_dict(row, include_content=include_content) for row in selected]
     sources = [
         {
             "document_id": row["source_document_id"],
@@ -725,7 +724,90 @@ def wiki_context(query: str, purpose: str | None = None, limit: int = 8) -> dict
     return {"query": query, "pages": pages, "sources": sources}
 
 
-def score_page(row: dict, query: str) -> int:
+def context_page_to_dict(row: dict, include_content: bool) -> dict:
+    page = page_to_dict(row)
+    if not include_content:
+        page.pop("content", None)
+    return page
+
+
+def context_sort_key(item: tuple[int, dict]) -> tuple[int, int, str]:
+    score, row = item
+    updated_digits = re.sub(r"\D", "", str(row.get("updated_at") or ""))[:14]
+    updated_at = int(updated_digits) if updated_digits else 0
+    return (-score, -updated_at, str(row.get("id") or ""))
+
+
+def find_wiki_context_candidates(conn, query: str, purpose: str | None, limit: int) -> list[dict]:
+    values = purpose_filter_values(purpose) if purpose else []
+    candidate_limit = max(limit * 12, 100)
+    common_select = """
+        SELECT w.*, d.original_filename, d.file_format, d.folder_path, d.size_bytes
+        FROM wiki_pages w
+        LEFT JOIN documents d ON d.id = w.source_document_id
+    """
+    filters = ["w.status = 'ready'"]
+    params: list[object] = []
+    if values:
+        filters.append(f"w.purpose IN ({','.join('?' for _ in values)})")
+        params.extend(values)
+
+    if wiki_fts_available(conn):
+        match_query = wiki_fts_match_query(query)
+        if match_query:
+            try:
+                rows = conn.execute(
+                    f"""
+                    {common_select}
+                    JOIN wiki_pages_fts ON wiki_pages_fts.page_id = w.id
+                    WHERE {' AND '.join(filters)} AND wiki_pages_fts MATCH ?
+                    ORDER BY bm25(wiki_pages_fts)
+                    LIMIT ?
+                    """,
+                    [*params, match_query, candidate_limit],
+                ).fetchall()
+                if rows:
+                    return [dict(row) for row in rows]
+            except Exception:
+                # Fall through to the portable query path if FTS is unavailable or
+                # a user query cannot be represented by the tokenizer.
+                pass
+
+    normalized = query.replace("%", "\\%").replace("_", "\\_")
+    like = f"%{normalized}%"
+    rows = conn.execute(
+        f"""
+        {common_select}
+        WHERE {' AND '.join(filters)}
+          AND (w.title LIKE ? ESCAPE '\\' OR w.summary LIKE ? ESCAPE '\\'
+               OR w.keywords LIKE ? ESCAPE '\\' OR w.content LIKE ? ESCAPE '\\')
+        ORDER BY w.updated_at DESC, w.id ASC
+        LIMIT ?
+        """,
+        [*params, like, like, like, like, candidate_limit],
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def wiki_fts_available(conn) -> bool:
+    return bool(
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'wiki_pages_fts'"
+        ).fetchone()
+    )
+
+
+def wiki_fts_match_query(query: str) -> str:
+    terms: list[str] = []
+    for latin in re.findall(r"[A-Za-z0-9_-]{3,}", query):
+        terms.append(latin)
+    for group in re.findall(r"[\u4e00-\u9fff]+", query):
+        if len(group) >= 3:
+            terms.extend(group[index : index + 3] for index in range(len(group) - 2))
+    return " OR ".join(f'"{term.replace(chr(34), "")}"' for term in dict.fromkeys(terms))
+
+
+def relevance_score(row: dict, query: str) -> int:
     text = "\n".join(
         str(row.get(key) or "")
         for key in ("title", "summary", "content", "keywords")
@@ -740,7 +822,7 @@ def score_page(row: dict, query: str) -> int:
         score += text.count(term)
     if query.lower() in text:
         score += 3
-    return -score
+    return score
 
 
 def query_terms(query: str) -> list[str]:

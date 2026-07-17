@@ -240,12 +240,12 @@ export function App() {
                 </div>
                 <ol>
                   <li>优先请求 <code>GET /api/v1/wiki/index</code> 获取知识总览。</li>
-                  <li>按问题请求 <code>GET /api/v1/wiki/context?query=...</code> 获取推荐阅读包。</li>
+                  <li>按问题请求 <code>GET /api/v1/wiki/context?query=...</code> 获取推荐阅读包；只需摘要时增加 <code>include_content=false</code>。</li>
                   <li>需要证据时再读取返回的 <code>content_url</code> 或 manifest 原文。</li>
                   <li>如配置了 <code>KB_AGENT_READ_TOKEN</code>，请求头带 <code>Authorization: Bearer TOKEN</code>。</li>
                 </ol>
                 <pre>{`GET ${window.location.origin}/api/v1/wiki/index
-GET ${window.location.origin}/api/v1/wiki/context?query=项目管理
+GET ${window.location.origin}/api/v1/wiki/context?query=项目管理&include_content=false
 GET ${window.location.origin}/api/v1/manifest
 GET ${window.location.origin}/api/v1/documents/{document_id}/content?format=markdown`}</pre>
               </section>
@@ -351,6 +351,7 @@ ${baseUrl}
 
 2. 带着用户问题读取上下文包：
    GET ${baseUrl}/api/v1/wiki/context?query=<用户问题或关键词>&limit=8
+   只需摘要和来源时追加：&include_content=false
 
    返回重点字段：
    - pages: 推荐阅读的分类总览页和单文件摘要页
@@ -385,7 +386,7 @@ curl -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
   "${baseUrl}/api/v1/wiki/index"
 
 curl -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
-  "${baseUrl}/api/v1/wiki/context?query=项目管理&limit=8"
+  "${baseUrl}/api/v1/wiki/context?query=项目管理&limit=8&include_content=false"
 
 curl -H "Authorization: Bearer <KB_AGENT_READ_TOKEN>" \\
   "${baseUrl}/api/v1/manifest"
@@ -516,8 +517,12 @@ Body:
      "summary": "这份材料的核心摘要...",
      "content": "# Wiki 页面\\n\\n## 核心观点\\n...",
      "keywords": ["项目", "验收", "风险"],
-     "worker": "qoder-work"
+     "worker": "qoder-work",
+     "refresh_overview": true
    }
+
+   批量回写同一分类时，可将每篇的 refresh_overview 设为 false，最后一次性调用：
+   POST ${baseUrl}/api/v1/wiki/overview/refresh?purpose=产品社区文档
 
 5. 失败时：
    POST ${baseUrl}/api/v1/wiki/compile-jobs/{job_id}/fail
