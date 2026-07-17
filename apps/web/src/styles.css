@@ -215,81 +215,66 @@ nav button {
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.agentBox {
+.agentLauncher {
   margin-top: auto;
-  padding: 14px;
+  min-height: 52px;
+  width: 100%;
+  padding: 8px 10px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 9px;
   background: var(--surface-soft);
-  display: grid;
-  gap: 8px;
-  color: var(--ink-2);
-  font-size: 13px;
-}
-
-.agentBoxHeader {
+  color: var(--ink);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 9px;
+  text-align: left;
 }
 
-.agentBox span {
-  color: var(--ink);
-  font-weight: 800;
-}
-
-.agentBox p {
-  color: var(--ink-2);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.agentBox code {
-  display: block;
-  color: var(--ink);
-  background: var(--surface-strong);
-  border-radius: 7px;
-  padding: 8px;
-  overflow-wrap: anywhere;
-}
-
-.agentBox small {
-  color: var(--green);
-  line-height: 1.45;
-}
-
-.agentTextButton {
-  border: 0;
-  background: transparent;
+.agentLauncher > svg:first-child {
   color: var(--accent);
-  font-size: 12px;
-  font-weight: 800;
-  padding: 0;
+  flex: 0 0 auto;
 }
 
-.agentQuickActions {
+.agentLauncher > span {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 7px;
+  min-width: 0;
+  gap: 2px;
+  flex: 1;
 }
 
-.agentQuickActions button {
-  min-height: 34px;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--ink);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  font-weight: 800;
-  font-size: 12px;
+.agentLauncher strong {
+  font-size: 13px;
+  font-weight: 850;
 }
 
-.agentQuickActions button:hover {
+.agentLauncher small {
+  color: var(--ink-3);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentLauncher > svg:last-child {
+  color: var(--ink-3);
+  transform: rotate(-90deg);
+  flex: 0 0 auto;
+}
+
+.agentLauncher:hover {
+  border-color: var(--line-strong);
   background: var(--surface-strong);
+}
+
+.agentGuideNotice {
+  margin: -2px 0 12px;
+  padding: 8px 10px;
+  border: 1px solid #cbe8dc;
+  border-radius: 8px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .mainArea {
@@ -814,9 +799,14 @@ input {
   overflow: hidden;
 }
 
+.rawTableWrap,
 .knowledgeTableWrap {
   max-height: calc(100vh - 330px);
   min-height: 360px;
+}
+
+.rawTableWrap {
+  scrollbar-gutter: stable;
 }
 
 .knowledgeTable {
@@ -2372,10 +2362,6 @@ pre {
 
   .treeNav {
     max-height: 420px;
-  }
-
-  .agentBox {
-    display: none;
   }
 
   .documentLayout,
