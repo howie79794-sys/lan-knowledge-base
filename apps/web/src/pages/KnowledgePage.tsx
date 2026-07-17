@@ -133,7 +133,7 @@ export function KnowledgePage({ purpose }: { purpose: string }) {
   }
 
   return (
-    <section className="workspace">
+    <section className="workspace knowledgeWorkspace">
       <div className="sectionHeader">
         <div>
           <h2>知识管理 · {purpose}</h2>

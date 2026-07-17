@@ -287,6 +287,14 @@ nav button {
   margin: 0 auto;
 }
 
+.documentWorkspace,
+.knowledgeWorkspace {
+  height: calc(100vh - 60px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .sectionHeader {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -426,6 +434,8 @@ input {
   grid-template-columns: minmax(0, 1fr) 400px;
   gap: 16px;
   align-items: stretch;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .knowledgeLayout {
@@ -433,6 +443,8 @@ input {
   grid-template-columns: minmax(0, 1fr) 430px;
   gap: 16px;
   align-items: stretch;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .listPane,
@@ -496,6 +508,8 @@ input {
   top: 24px;
   align-content: start;
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
 }
 
 .tableWrap {
@@ -1143,6 +1157,7 @@ tr:hover,
 .detailPane {
   padding: 16px;
   min-height: 360px;
+  overflow: auto;
 }
 
 .detailTop {
@@ -2389,6 +2404,12 @@ pre {
   .documentLayout,
   .knowledgeLayout {
     align-items: start;
+    flex: initial;
+  }
+
+  .documentWorkspace,
+  .knowledgeWorkspace {
+    height: auto;
   }
 
   .listPane,
@@ -2400,6 +2421,11 @@ pre {
   .knowledgeTableWrap {
     min-height: 360px;
     max-height: calc(100vh - 330px);
+  }
+
+  .sidePanelStack,
+  .detailPane {
+    overflow: visible;
   }
 
   .guideDetailLayout {
