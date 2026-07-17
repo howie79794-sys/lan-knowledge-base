@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app.core.config import settings
+from app.core.config import DOCUMENT_PURPOSES, settings
 from app.modules.audit.service import write_audit
 from app.modules.wiki.service import (
     claim_next_smart_compile_jobs,
@@ -14,6 +14,7 @@ from app.modules.wiki.service import (
     fail_smart_compile_job,
     get_wiki_page,
     list_smart_compile_queue,
+    refresh_category_overview,
     release_failed_smart_compile_job,
     wiki_context,
     wiki_index,
@@ -41,6 +42,7 @@ class CompleteSmartCompileJobRequest(BaseModel):
     content: str | None = None
     keywords: list[str] | None = None
     worker: str | None = "qoder-work"
+    refresh_overview: bool = True
 
 
 class FailSmartCompileJobRequest(BaseModel):
@@ -112,9 +114,26 @@ def claim_selected_smart_compile_jobs_route(payload: ClaimSmartCompileJobsReques
 @router.post("/compile-jobs/{job_id}/complete")
 def complete_smart_compile_job_route(job_id: str, payload: CompleteSmartCompileJobRequest, request: Request, authorization: str | None = Header(default=None)):
     verify_worker_token(authorization)
-    job = complete_smart_compile_job(job_id, summary=payload.summary, content=payload.content, keywords=payload.keywords, worker=payload.worker)
+    job = complete_smart_compile_job(
+        job_id,
+        summary=payload.summary,
+        content=payload.content,
+        keywords=payload.keywords,
+        worker=payload.worker,
+        refresh_overview=payload.refresh_overview,
+    )
     write_audit("complete_wiki_compile_job", document_id=job["source_document_id"], actor=payload.worker, ip=request.client.host if request.client else None, message=job_id)
     return job
+
+
+@router.post("/overview/refresh")
+def refresh_wiki_overview_route(purpose: str, request: Request, authorization: str | None = Header(default=None)):
+    verify_worker_token(authorization)
+    if purpose not in DOCUMENT_PURPOSES:
+        raise HTTPException(status_code=400, detail="知识分类不在允许范围内。")
+    page = refresh_category_overview(purpose)
+    write_audit("refresh_wiki_overview", actor="agent", ip=request.client.host if request.client else None, message=purpose)
+    return page
 
 
 @router.post("/compile-jobs/{job_id}/fail")
@@ -145,8 +164,14 @@ def wiki_page_route(page_id: str, request: Request):
 
 
 @router.get("/context")
-def wiki_context_route(request: Request, query: str, purpose: str | None = None, limit: int = 8):
-    context = wiki_context(query=query, purpose=purpose, limit=limit)
+def wiki_context_route(
+    request: Request,
+    query: str,
+    purpose: str | None = None,
+    limit: int = 8,
+    include_content: bool = True,
+):
+    context = wiki_context(query=query, purpose=purpose, limit=limit, include_content=include_content)
     for page in context["pages"]:
         add_single_page_urls(page, request)
     for source in context["sources"]:

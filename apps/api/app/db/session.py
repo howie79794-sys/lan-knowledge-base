@@ -217,3 +217,79 @@ def init_db() -> None:
         wiki_page_columns = {row["name"] for row in conn.execute("PRAGMA table_info(wiki_pages)").fetchall()}
         if "compile_method" not in wiki_page_columns:
             conn.execute("ALTER TABLE wiki_pages ADD COLUMN compile_method TEXT NOT NULL DEFAULT 'local'")
+        _init_wiki_search_index(conn)
+
+
+def _init_wiki_search_index(conn: sqlite3.Connection) -> None:
+    """Create and backfill the SQLite full-text index used by Wiki context search.
+
+    FTS5's trigram tokenizer is effective for Chinese substring retrieval.  If an
+    older SQLite build does not include FTS5/trigram support, the Wiki service
+    detects the missing table and safely falls back to its standard SQL path.
+    """
+    try:
+        existing = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'wiki_pages_fts'"
+        ).fetchone()
+        conn.execute(
+            """
+            CREATE VIRTUAL TABLE IF NOT EXISTS wiki_pages_fts USING fts5(
+                page_id UNINDEXED,
+                purpose UNINDEXED,
+                title,
+                summary,
+                content,
+                keywords,
+                tokenize = 'trigram'
+            )
+            """
+        )
+        conn.executescript(
+            """
+            CREATE TRIGGER IF NOT EXISTS wiki_pages_fts_before_insert
+            BEFORE INSERT ON wiki_pages BEGIN
+                DELETE FROM wiki_pages_fts WHERE page_id = new.id;
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS wiki_pages_fts_after_insert
+            AFTER INSERT ON wiki_pages BEGIN
+                INSERT INTO wiki_pages_fts (page_id, purpose, title, summary, content, keywords)
+                VALUES (new.id, new.purpose, new.title, new.summary, new.content, COALESCE(new.keywords, ''));
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS wiki_pages_fts_after_delete
+            AFTER DELETE ON wiki_pages BEGIN
+                DELETE FROM wiki_pages_fts WHERE page_id = old.id;
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS wiki_pages_fts_after_update
+            AFTER UPDATE ON wiki_pages BEGIN
+                DELETE FROM wiki_pages_fts WHERE page_id = old.id;
+                INSERT INTO wiki_pages_fts (page_id, purpose, title, summary, content, keywords)
+                VALUES (new.id, new.purpose, new.title, new.summary, new.content, COALESCE(new.keywords, ''));
+            END;
+            """
+        )
+        if not existing:
+            conn.execute(
+                """
+                INSERT INTO wiki_pages_fts (page_id, purpose, title, summary, content, keywords)
+                SELECT id, purpose, title, summary, content, COALESCE(keywords, '')
+                FROM wiki_pages
+                """
+            )
+        else:
+            indexed_count = conn.execute("SELECT COUNT(*) FROM wiki_pages_fts").fetchone()[0]
+            page_count = conn.execute("SELECT COUNT(*) FROM wiki_pages").fetchone()[0]
+            if indexed_count != page_count:
+                conn.execute("DELETE FROM wiki_pages_fts")
+                conn.execute(
+                    """
+                    INSERT INTO wiki_pages_fts (page_id, purpose, title, summary, content, keywords)
+                    SELECT id, purpose, title, summary, content, COALESCE(keywords, '')
+                    FROM wiki_pages
+                    """
+                )
+    except sqlite3.OperationalError:
+        # The base Wiki lookup remains available for SQLite builds without FTS5.
+        return
