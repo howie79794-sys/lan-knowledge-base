@@ -668,7 +668,7 @@ export function DocumentsPage({
   }
 
   return (
-    <section className="workspace">
+    <section className="workspace documentWorkspace">
       <div className="sectionHeader">
         <div>
           <h2>原始文件 · {purpose}</h2>
