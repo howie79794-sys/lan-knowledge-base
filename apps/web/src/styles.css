@@ -295,6 +295,11 @@ nav button {
   flex-direction: column;
 }
 
+.documentWorkspace > :not(.documentLayout),
+.knowledgeWorkspace > :not(.knowledgeLayout) {
+  flex: 0 0 auto;
+}
+
 .sectionHeader {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -435,7 +440,7 @@ input {
   gap: 16px;
   align-items: stretch;
   min-height: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
 }
 
 .knowledgeLayout {
@@ -444,7 +449,7 @@ input {
   gap: 16px;
   align-items: stretch;
   min-height: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
 }
 
 .listPane,
