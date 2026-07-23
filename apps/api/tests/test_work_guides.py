@@ -59,6 +59,24 @@ status: archived
                 with self.assertRaises(FileNotFoundError):
                     service.work_guide_asset_path("资金计划填报规范", "../旧规范.md")
 
+    def test_publish_work_guide(self):
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            test_settings = SimpleNamespace(work_guides_dir=str(root), max_upload_mb=1)
+            with patch.object(service, "settings", test_settings):
+                detail = service.publish_work_guide(
+                    "全面需求管理通用指标手册",
+                    "# 全面需求管理通用指标手册\n\n用于部门对标、整改参考。",
+                )
+
+                self.assertEqual(detail["slug"], "全面需求管理通用指标手册")
+                self.assertEqual(detail["title"], "全面需求管理通用指标手册")
+                self.assertEqual(detail["summary"], "用于部门对标、整改参考。")
+                self.assertTrue((root / "全面需求管理通用指标手册" / "index.md").is_file())
+
+                with self.assertRaises(ValueError):
+                    service.publish_work_guide("../无效名称", "# 无效名称")
+
 
 if __name__ == "__main__":
     unittest.main()

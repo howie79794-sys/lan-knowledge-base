@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class WorkGuideSummary(BaseModel):
@@ -21,3 +21,7 @@ class WorkGuideListResponse(BaseModel):
     total: int
     categories: list[str]
     guides: list[WorkGuideSummary]
+
+
+class WorkGuidePublishRequest(BaseModel):
+    markdown: str = Field(min_length=1)
