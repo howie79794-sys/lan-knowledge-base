@@ -77,6 +77,28 @@ status: archived
                 with self.assertRaises(ValueError):
                     service.publish_work_guide("../无效名称", "# 无效名称")
 
+    def test_publish_work_guide_asset(self):
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            test_settings = SimpleNamespace(work_guides_dir=str(root), max_upload_mb=1)
+            with patch.object(service, "settings", test_settings):
+                result = service.publish_work_guide_asset(
+                    "补丁发布说明填写规范",
+                    "图片/总体说明.png",
+                    b"png-content",
+                )
+
+                self.assertEqual(result, {"path": "图片/总体说明.png", "size_bytes": 11})
+                self.assertEqual(
+                    (root / "补丁发布说明填写规范" / "图片" / "总体说明.png").read_bytes(),
+                    b"png-content",
+                )
+
+                with self.assertRaises(ValueError):
+                    service.publish_work_guide_asset("补丁发布说明填写规范", "../越界.png", b"png")
+                with self.assertRaises(ValueError):
+                    service.publish_work_guide_asset("补丁发布说明填写规范", "正文.md", b"markdown")
+
 
 if __name__ == "__main__":
     unittest.main()

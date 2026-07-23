@@ -109,3 +109,15 @@ Content-Type: application/json
 ```
 
 接口会把正文写入 `F:\kb-data\work-guides\{工作指引名称}\index.md`。工作指引名称不能包含路径分隔符或 Windows 文件名非法字符。
+
+工作指引中的图片可以通过资源接口上传：
+
+```http
+PUT /api/v1/work-guides/{工作指引名称}/assets/{图片名称}
+Authorization: Bearer <Agent Token>
+Content-Type: multipart/form-data
+
+file=<图片文件>
+```
+
+资源接口仅接受工作指引支持的图片格式，并会把图片保存到对应指引目录。Markdown 使用相对路径引用即可，例如 `![总体说明](./总体说明.png)`。
