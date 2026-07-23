@@ -14,6 +14,7 @@ from app.core.config import settings
 MARKDOWN_EXTENSIONS = {".md", ".markdown"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".avif"}
 INVALID_SLUG_CHARACTERS = set('<>:"/\\|?*')
+WINDOWS_RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL", *(f"COM{index}" for index in range(1, 10)), *(f"LPT{index}" for index in range(1, 10))}
 
 
 def list_work_guides(q: str | None = None, category: str | None = None) -> dict[str, Any]:
@@ -45,15 +46,7 @@ def get_work_guide(slug: str) -> dict[str, Any]:
 
 
 def publish_work_guide(slug: str, markdown: str) -> dict[str, Any]:
-    normalized_slug = slug.strip()
-    if (
-        not normalized_slug
-        or len(normalized_slug) > 120
-        or normalized_slug in {".", ".."}
-        or normalized_slug.startswith(".")
-        or any(character in INVALID_SLUG_CHARACTERS or ord(character) < 32 for character in normalized_slug)
-    ):
-        raise ValueError("工作指引名称不合法。")
+    normalized_slug = _validate_path_segment(slug, "工作指引名称", max_length=120)
 
     normalized_markdown = markdown.strip()
     if not normalized_markdown:
@@ -76,6 +69,33 @@ def publish_work_guide(slug: str, markdown: str) -> dict[str, Any]:
     return get_work_guide(normalized_slug)
 
 
+def publish_work_guide_asset(slug: str, asset_path: str, content: bytes) -> dict[str, Any]:
+    normalized_slug = _validate_path_segment(slug, "工作指引名称", max_length=120)
+    normalized_asset_path = asset_path.strip().replace("\\", "/")
+    path_parts = [part for part in normalized_asset_path.split("/") if part]
+    if not path_parts or len(path_parts) > 8:
+        raise ValueError("工作指引图片路径不合法。")
+    normalized_parts = [_validate_path_segment(part, "工作指引图片路径", max_length=120) for part in path_parts]
+    if Path(normalized_parts[-1]).suffix.lower() not in IMAGE_EXTENSIONS:
+        raise ValueError("工作指引只支持图片资源。")
+    if not content:
+        raise ValueError("工作指引图片不能为空。")
+    max_bytes = getattr(settings, "max_upload_mb", 300) * 1024 * 1024
+    if len(content) > max_bytes:
+        raise ValueError(f"工作指引图片不能超过 {getattr(settings, 'max_upload_mb', 300)}MB。")
+
+    guide_dir = Path(settings.work_guides_dir) / normalized_slug
+    target_path = guide_dir.joinpath(*normalized_parts)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = target_path.parent / f".asset-{uuid4().hex}.tmp"
+    try:
+        temporary_path.write_bytes(content)
+        temporary_path.replace(target_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+    return {"path": "/".join(normalized_parts), "size_bytes": len(content)}
+
+
 def work_guide_asset_path(slug: str, asset_path: str) -> Path:
     guide_dir = _guide_directory(slug)
     base = guide_dir.resolve()
@@ -85,6 +105,21 @@ def work_guide_asset_path(slug: str, asset_path: str) -> Path:
     if not target.is_file() or target.suffix.lower() not in IMAGE_EXTENSIONS:
         raise FileNotFoundError("工作指引图片不存在。")
     return target
+
+
+def _validate_path_segment(value: str, label: str, max_length: int) -> str:
+    normalized = value.strip()
+    if (
+        not normalized
+        or len(normalized) > max_length
+        or normalized in {".", ".."}
+        or normalized.startswith(".")
+        or normalized.endswith(".")
+        or normalized.split(".", 1)[0].upper() in WINDOWS_RESERVED_NAMES
+        or any(character in INVALID_SLUG_CHARACTERS or ord(character) < 32 for character in normalized)
+    ):
+        raise ValueError(f"{label}不合法。")
+    return normalized
 
 
 def _discover_guides() -> list[tuple[str, Path, Path]]:

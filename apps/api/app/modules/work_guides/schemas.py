@@ -25,3 +25,8 @@ class WorkGuideListResponse(BaseModel):
 
 class WorkGuidePublishRequest(BaseModel):
     markdown: str = Field(min_length=1)
+
+
+class WorkGuideAssetPublishResponse(BaseModel):
+    path: str
+    size_bytes: int
