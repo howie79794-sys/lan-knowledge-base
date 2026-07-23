@@ -93,3 +93,19 @@ category: 操作流程
 4. 检查卡片概要、分类、正文格式和图片是否正确。
 
 过期规范建议把 `status` 改为 `archived`，不要直接覆盖后继续沿用旧版本号。
+
+## Agent 发布接口
+
+Agent 可以使用与解析队列相同的 Token 发布或覆盖一份工作指引：
+
+```http
+PUT /api/v1/work-guides/{工作指引名称}
+Authorization: Bearer <Agent Token>
+Content-Type: application/json
+
+{
+  "markdown": "# 工作指引标题\n\n这里填写正文。"
+}
+```
+
+接口会把正文写入 `F:\kb-data\work-guides\{工作指引名称}\index.md`。工作指引名称不能包含路径分隔符或 Windows 文件名非法字符。

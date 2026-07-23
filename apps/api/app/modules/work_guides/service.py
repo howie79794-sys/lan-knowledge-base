@@ -4,6 +4,7 @@ from datetime import date, datetime
 from pathlib import Path
 import re
 from typing import Any
+from uuid import uuid4
 
 import yaml
 
@@ -12,6 +13,7 @@ from app.core.config import settings
 
 MARKDOWN_EXTENSIONS = {".md", ".markdown"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".avif"}
+INVALID_SLUG_CHARACTERS = set('<>:"/\\|?*')
 
 
 def list_work_guides(q: str | None = None, category: str | None = None) -> dict[str, Any]:
@@ -40,6 +42,38 @@ def get_work_guide(slug: str) -> dict[str, Any]:
         if discovered_slug == slug:
             return _public_guide(_read_guide(markdown_path, discovered_slug, guide_dir), include_content=True)
     raise FileNotFoundError("工作指引不存在。")
+
+
+def publish_work_guide(slug: str, markdown: str) -> dict[str, Any]:
+    normalized_slug = slug.strip()
+    if (
+        not normalized_slug
+        or len(normalized_slug) > 120
+        or normalized_slug in {".", ".."}
+        or normalized_slug.startswith(".")
+        or any(character in INVALID_SLUG_CHARACTERS or ord(character) < 32 for character in normalized_slug)
+    ):
+        raise ValueError("工作指引名称不合法。")
+
+    normalized_markdown = markdown.strip()
+    if not normalized_markdown:
+        raise ValueError("工作指引正文不能为空。")
+    max_bytes = getattr(settings, "max_upload_mb", 300) * 1024 * 1024
+    if len(normalized_markdown.encode("utf-8")) > max_bytes:
+        raise ValueError(f"工作指引不能超过 {getattr(settings, 'max_upload_mb', 300)}MB。")
+
+    root = Path(settings.work_guides_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    guide_dir = root / normalized_slug
+    guide_dir.mkdir(parents=True, exist_ok=True)
+    index_path = guide_dir / "index.md"
+    temporary_path = guide_dir / f".index-{uuid4().hex}.tmp"
+    try:
+        temporary_path.write_text(normalized_markdown + "\n", encoding="utf-8")
+        temporary_path.replace(index_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+    return get_work_guide(normalized_slug)
 
 
 def work_guide_asset_path(slug: str, asset_path: str) -> Path:
